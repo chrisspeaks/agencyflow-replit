@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { ProjectDialog } from "@/components/ProjectDialog";
 
 interface Project {
   id: string;
@@ -16,6 +17,7 @@ interface Project {
 const Projects = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -53,11 +55,17 @@ const Projects = () => {
           <h1 className="text-3xl font-bold">Projects</h1>
           <p className="text-muted-foreground">Manage your agency projects</p>
         </div>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={() => setDialogOpen(true)}>
           <Plus className="h-4 w-4" />
           New Project
         </Button>
       </div>
+
+      <ProjectDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSuccess={fetchProjects}
+      />
 
       {projects.length === 0 ? (
         <Card>

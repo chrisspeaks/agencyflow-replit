@@ -13,6 +13,8 @@ import Projects from "./pages/Projects";
 import ProjectDetail from "./pages/ProjectDetail";
 import Team from "./pages/Team";
 import MyWorkbench from "./pages/MyWorkbench";
+import AdminDashboard from "./pages/AdminDashboard";
+import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -86,6 +88,26 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <MyWorkbench />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <AdminDashboard />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <Profile />
                 </DashboardLayout>
               </ProtectedRoute>
             }
