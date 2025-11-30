@@ -21,6 +21,7 @@ export type Database = {
           email: string
           full_name: string
           id: string
+          is_active: boolean
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
         }
@@ -30,6 +31,7 @@ export type Database = {
           email: string
           full_name: string
           id: string
+          is_active?: boolean
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
         }
@@ -39,6 +41,7 @@ export type Database = {
           email?: string
           full_name?: string
           id?: string
+          is_active?: boolean
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
         }
@@ -206,11 +209,39 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       is_admin: { Args: { user_id: string }; Returns: boolean }
       is_project_member: {
         Args: { proj_id: string; user_id: string }
@@ -218,6 +249,7 @@ export type Database = {
       }
     }
     Enums: {
+      app_role: "admin" | "manager" | "staff"
       project_status: "active" | "archived" | "completed"
       task_priority: "P1-High" | "P2-Medium" | "P3-Low"
       task_status: "Todo" | "In Progress" | "Internal Review" | "Done"
@@ -349,6 +381,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["admin", "manager", "staff"],
       project_status: ["active", "archived", "completed"],
       task_priority: ["P1-High", "P2-Medium", "P3-Low"],
       task_status: ["Todo", "In Progress", "Internal Review", "Done"],
