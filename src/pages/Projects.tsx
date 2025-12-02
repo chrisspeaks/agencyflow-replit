@@ -18,11 +18,30 @@ const Projects = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
+    fetchUserRole();
     fetchProjects();
   }, []);
+
+  const fetchUserRole = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .single();
+
+      setUserRole(data?.role || null);
+    } catch (error) {
+      console.error("Error fetching user role:", error);
+    }
+  };
 
   const fetchProjects = async () => {
     try {
@@ -55,10 +74,12 @@ const Projects = () => {
           <h1 className="text-3xl font-bold">Projects</h1>
           <p className="text-muted-foreground">Manage your agency projects</p>
         </div>
-        <Button className="gap-2" onClick={() => setDialogOpen(true)}>
-          <Plus className="h-4 w-4" />
-          New Project
-        </Button>
+        {userRole !== "staff" && (
+          <Button className="gap-2" onClick={() => setDialogOpen(true)}>
+            <Plus className="h-4 w-4" />
+            New Project
+          </Button>
+        )}
       </div>
 
       <ProjectDialog

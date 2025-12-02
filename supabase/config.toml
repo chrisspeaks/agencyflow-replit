@@ -2,3 +2,9 @@ project_id = "qewuorfsbdcakfraxlev"
 
 [functions.send-task-notification]
 verify_jwt = false
+
+[functions.send-assignment-notification]
+verify_jwt = false
+
+[functions.send-project-member-notification]
+verify_jwt = false
