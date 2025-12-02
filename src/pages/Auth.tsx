@@ -12,8 +12,16 @@ import { APP_NAME } from "@/config/appConfig";
 const Auth = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [inactiveMessage, setInactiveMessage] = useState(false);
 
   useEffect(() => {
+    // Check if redirected due to inactive account
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('inactive') === 'true') {
+      setInactiveMessage(true);
+      toast.error("Your account is pending approval. Please contact an administrator.");
+    }
+
     // Check if user is already logged in
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
@@ -45,7 +53,7 @@ const Auth = () => {
     if (error) {
       toast.error(error.message);
     } else {
-      toast.success("Account created! Please check your email to verify.");
+      toast.success("Account created! Your account is pending approval by an administrator. You will receive an email once approved.");
     }
     setLoading(false);
   };

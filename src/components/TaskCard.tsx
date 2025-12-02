@@ -56,11 +56,16 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
     }
   };
 
+  // Check if task is overdue
+  const isOverdue = task.due_date && 
+    new Date(task.due_date) < new Date() && 
+    task.status !== "Done";
+
   return (
     <Card
       ref={setNodeRef}
       style={style}
-      className="cursor-pointer hover:shadow-md transition-shadow"
+      className={`cursor-pointer hover:shadow-md transition-shadow ${isOverdue ? 'border-destructive bg-destructive/5' : ''}`}
       onClick={onClick}
     >
       <CardContent className="p-4">
@@ -98,6 +103,12 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
                 Blocked
               </Badge>
             )}
+            {isOverdue && (
+              <Badge variant="destructive" className="text-xs">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                OVERDUE
+              </Badge>
+            )}
           </div>
 
           {task.profiles && (
@@ -115,7 +126,7 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
         </div>
 
         {task.due_date && (
-          <div className="flex items-center gap-1 mt-3 text-xs text-muted-foreground">
+          <div className={`flex items-center gap-1 mt-3 text-xs ${isOverdue ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
             <Clock className="h-3 w-3" />
             <span>{format(new Date(task.due_date), "MMM dd, yyyy")}</span>
           </div>

@@ -57,7 +57,7 @@ export function TaskDialog({
     description: "",
     status: "Todo",
     priority: "P2-Medium",
-    assignee_id: null as string | null,
+    assignee_ids: [] as string[],
     due_date: null as Date | null,
     is_blocked: false,
     comments: "",
@@ -68,12 +68,13 @@ export function TaskDialog({
       fetchTeamMembers();
       fetchProjectName();
       if (task) {
+        fetchTaskAssignees(task.id);
         setFormData({
           title: task.title || "",
           description: task.description || "",
           status: task.status || "Todo",
           priority: task.priority || "P2-Medium",
-          assignee_id: task.assignee_id || null,
+          assignee_ids: [],
           due_date: task.due_date ? new Date(task.due_date) : null,
           is_blocked: task.is_blocked || false,
           comments: task.comments || "",
@@ -84,7 +85,7 @@ export function TaskDialog({
           description: "",
           status: "Todo",
           priority: "P2-Medium",
-          assignee_id: null,
+          assignee_ids: [],
           due_date: null,
           is_blocked: false,
           comments: "",
@@ -92,6 +93,20 @@ export function TaskDialog({
       }
     }
   }, [open, task]);
+
+  const fetchTaskAssignees = async (taskId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("task_assignees")
+        .select("user_id")
+        .eq("task_id", taskId);
+
+      if (error) throw error;
+      setFormData(prev => ({ ...prev, assignee_ids: data.map(a => a.user_id) }));
+    } catch (error) {
+      console.error("Error fetching task assignees:", error);
+    }
+  };
 
   const fetchTeamMembers = async () => {
     try {
@@ -131,8 +146,9 @@ export function TaskDialog({
     setLoading(true);
 
     try {
-      const taskData = {
-        ...formData,
+      const { assignee_ids, ...taskData } = formData;
+      const finalTaskData = {
+        ...taskData,
         project_id: projectId,
         due_date: formData.due_date?.toISOString(),
       } as any;
@@ -141,39 +157,125 @@ export function TaskDialog({
       if (task) {
         result = await supabase
           .from("tasks")
-          .update(taskData)
+          .update(finalTaskData)
           .eq("id", task.id)
           .select()
           .single();
       } else {
         result = await supabase
           .from("tasks")
-          .insert(taskData)
+          .insert(finalTaskData)
           .select()
           .single();
       }
 
       if (result.error) throw result.error;
 
-      // Send email notification if task is assigned
-      if (formData.assignee_id && !task) {
-        const assignee = teamMembers.find((m) => m.id === formData.assignee_id);
-        if (assignee) {
-          try {
-            await supabase.functions.invoke("send-task-notification", {
-              body: {
-                taskId: result.data.id,
-                taskTitle: formData.title,
-                assigneeEmail: assignee.email,
-                assigneeName: assignee.full_name,
-                projectName: projectName,
-                dueDate: formData.due_date?.toISOString(),
-                priority: formData.priority,
-              },
-            });
-          } catch (emailError) {
-            console.error("Error sending notification:", emailError);
-            // Don't fail the whole operation if email fails
+      // Handle assignees
+      if (task) {
+        // Get previous assignees
+        const { data: previousAssignees } = await supabase
+          .from("task_assignees")
+          .select("user_id")
+          .eq("task_id", task.id);
+        
+        const previousIds = previousAssignees?.map(a => a.user_id) || [];
+        const addedIds = assignee_ids.filter(id => !previousIds.includes(id));
+        const removedIds = previousIds.filter(id => !assignee_ids.includes(id));
+
+        // Remove old assignees
+        if (removedIds.length > 0) {
+          await supabase
+            .from("task_assignees")
+            .delete()
+            .eq("task_id", task.id)
+            .in("user_id", removedIds);
+          
+          // Send unassignment emails
+          for (const userId of removedIds) {
+            const member = teamMembers.find(m => m.id === userId);
+            if (member) {
+              try {
+                await supabase.functions.invoke("send-assignment-notification", {
+                  body: {
+                    taskId: task.id,
+                    taskTitle: formData.title,
+                    assigneeEmail: member.email,
+                    assigneeName: member.full_name,
+                    projectName: projectName,
+                    dueDate: formData.due_date?.toISOString(),
+                    priority: formData.priority,
+                    action: "unassigned",
+                  },
+                });
+              } catch (emailError) {
+                console.error("Error sending unassignment notification:", emailError);
+              }
+            }
+          }
+        }
+
+        // Add new assignees
+        if (addedIds.length > 0) {
+          const newAssignees = addedIds.map(userId => ({
+            task_id: task.id,
+            user_id: userId,
+          }));
+          await supabase.from("task_assignees").insert(newAssignees);
+
+          // Send assignment emails
+          for (const userId of addedIds) {
+            const member = teamMembers.find(m => m.id === userId);
+            if (member) {
+              try {
+                await supabase.functions.invoke("send-assignment-notification", {
+                  body: {
+                    taskId: task.id,
+                    taskTitle: formData.title,
+                    assigneeEmail: member.email,
+                    assigneeName: member.full_name,
+                    projectName: projectName,
+                    dueDate: formData.due_date?.toISOString(),
+                    priority: formData.priority,
+                    action: "assigned",
+                  },
+                });
+              } catch (emailError) {
+                console.error("Error sending assignment notification:", emailError);
+              }
+            }
+          }
+        }
+      } else {
+        // New task - add all assignees
+        if (assignee_ids.length > 0) {
+          const newAssignees = assignee_ids.map(userId => ({
+            task_id: result.data.id,
+            user_id: userId,
+          }));
+          await supabase.from("task_assignees").insert(newAssignees);
+
+          // Send assignment emails
+          for (const userId of assignee_ids) {
+            const member = teamMembers.find(m => m.id === userId);
+            if (member) {
+              try {
+                await supabase.functions.invoke("send-assignment-notification", {
+                  body: {
+                    taskId: result.data.id,
+                    taskTitle: formData.title,
+                    assigneeEmail: member.email,
+                    assigneeName: member.full_name,
+                    projectName: projectName,
+                    dueDate: formData.due_date?.toISOString(),
+                    priority: formData.priority,
+                    action: "assigned",
+                  },
+                });
+              } catch (emailError) {
+                console.error("Error sending assignment notification:", emailError);
+              }
+            }
           }
         }
       }
@@ -290,31 +392,31 @@ export function TaskDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Assign To</Label>
-            <Select
-              value={formData.assignee_id || "unassigned"}
-              onValueChange={(value) =>
-                setFormData({ ...formData, assignee_id: value === "unassigned" ? null : value })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select team member" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unassigned">Unassigned</SelectItem>
-                {teamMembers.length === 0 ? (
-                  <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                    No team members. Add members to the project first.
-                  </div>
-                ) : (
-                  teamMembers.map((member) => (
-                    <SelectItem key={member.id} value={member.id}>
-                      {member.full_name}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
+            <Label>Assign To (Multiple)</Label>
+            <div className="border rounded-md p-3 space-y-2 max-h-48 overflow-y-auto">
+              {teamMembers.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No team members. Add members to the project first.
+                </p>
+              ) : (
+                teamMembers.map((member) => (
+                  <label key={member.id} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.assignee_ids.includes(member.id)}
+                      onChange={(e) => {
+                        const newIds = e.target.checked
+                          ? [...formData.assignee_ids, member.id]
+                          : formData.assignee_ids.filter(id => id !== member.id);
+                        setFormData({ ...formData, assignee_ids: newIds });
+                      }}
+                      className="rounded border-gray-300"
+                    />
+                    <span className="text-sm">{member.full_name}</span>
+                  </label>
+                ))
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">

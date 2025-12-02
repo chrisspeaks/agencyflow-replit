@@ -103,6 +103,30 @@ export function TeamMembersDialog({
 
       if (error) throw error;
 
+      // Get project name and user details for email
+      const { data: projectData } = await supabase
+        .from("projects")
+        .select("name")
+        .eq("id", projectId)
+        .single();
+
+      const member = allUsers.find(u => u.id === selectedUserId);
+
+      if (projectData && member) {
+        try {
+          await supabase.functions.invoke("send-project-member-notification", {
+            body: {
+              memberEmail: member.email,
+              memberName: member.full_name,
+              projectName: projectData.name,
+              action: "added",
+            },
+          });
+        } catch (emailError) {
+          console.error("Error sending notification:", emailError);
+        }
+      }
+
       toast({
         title: "Member added",
         description: "Team member has been added to the project",
@@ -125,12 +149,39 @@ export function TeamMembersDialog({
   const handleRemoveMember = async (membershipId: string) => {
     setLoading(true);
     try {
+      // Get member details before removing
+      const memberToRemove = projectMembers.find(m => m.membership_id === membershipId);
+      
       const { error } = await supabase
         .from("project_members")
         .delete()
         .eq("id", membershipId);
 
       if (error) throw error;
+
+      // Send removal notification
+      if (memberToRemove) {
+        const { data: projectData } = await supabase
+          .from("projects")
+          .select("name")
+          .eq("id", projectId)
+          .single();
+
+        if (projectData) {
+          try {
+            await supabase.functions.invoke("send-project-member-notification", {
+              body: {
+                memberEmail: memberToRemove.email,
+                memberName: memberToRemove.full_name,
+                projectName: projectData.name,
+                action: "removed",
+              },
+            });
+          } catch (emailError) {
+            console.error("Error sending notification:", emailError);
+          }
+        }
+      }
 
       toast({
         title: "Member removed",

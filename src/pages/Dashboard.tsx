@@ -23,25 +23,84 @@ const Dashboard = () => {
 
   const fetchDashboardStats = async () => {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Check user role
+      const { data: roleData } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .single();
+
+      const userRole = roleData?.role;
+      const isAdminOrManager = userRole === "admin" || userRole === "manager";
+
       // Fetch active projects count
-      const { count: projectsCount } = await supabase
+      let projectsQuery = supabase
         .from("projects")
         .select("*", { count: "exact", head: true })
         .eq("status", "active");
 
+      if (!isAdminOrManager) {
+        // Staff: only show projects they're part of
+        const { data: memberProjects } = await supabase
+          .from("project_members")
+          .select("project_id")
+          .eq("user_id", user.id);
+        
+        const projectIds = memberProjects?.map(p => p.project_id) || [];
+        if (projectIds.length === 0) {
+          setStats({ activeProjects: 0, pendingTasks: 0, overdueTasks: 0 });
+          setLoading(false);
+          return;
+        }
+        projectsQuery = projectsQuery.in("id", projectIds);
+      }
+
+      const { count: projectsCount } = await projectsQuery;
+
       // Fetch pending tasks count
-      const { count: pendingCount } = await supabase
+      let pendingQuery = supabase
         .from("tasks")
-        .select("*", { count: "exact", head: true })
+        .select("project_id", { count: "exact", head: true })
         .neq("status", "Done");
+
+      if (!isAdminOrManager) {
+        const { data: memberProjects } = await supabase
+          .from("project_members")
+          .select("project_id")
+          .eq("user_id", user.id);
+        
+        const projectIds = memberProjects?.map(p => p.project_id) || [];
+        if (projectIds.length > 0) {
+          pendingQuery = pendingQuery.in("project_id", projectIds);
+        }
+      }
+
+      const { count: pendingCount } = await pendingQuery;
 
       // Fetch overdue tasks count
       const now = new Date().toISOString();
-      const { count: overdueCount } = await supabase
+      let overdueQuery = supabase
         .from("tasks")
-        .select("*", { count: "exact", head: true })
+        .select("project_id", { count: "exact", head: true })
         .lt("due_date", now)
         .neq("status", "Done");
+
+      if (!isAdminOrManager) {
+        const { data: memberProjects } = await supabase
+          .from("project_members")
+          .select("project_id")
+          .eq("user_id", user.id);
+        
+        const projectIds = memberProjects?.map(p => p.project_id) || [];
+        if (projectIds.length > 0) {
+          overdueQuery = overdueQuery.in("project_id", projectIds);
+        }
+      }
+
+      const { count: overdueCount } = await overdueQuery;
 
       setStats({
         activeProjects: projectsCount || 0,
