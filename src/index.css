@@ -81,11 +81,54 @@ All colors MUST be HSL.
   .task-overdue {
     @apply border-destructive border-2 bg-destructive/10;
   }
+
+  /* Hide scrollbar for cleaner look but keep functionality */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    height: 6px;
+    width: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 3px;
+  }
 }
 
 /* Mobile optimizations */
 @media (max-width: 640px) {
-  .dialog-content {
-    @apply max-w-[95vw] mx-2;
+  /* Dialogs should have proper spacing from edges */
+  [data-radix-dialog-content] {
+    max-width: calc(100vw - 2rem) !important;
+    max-height: calc(100vh - 4rem) !important;
+    margin: 1rem !important;
+  }
+  
+  /* Popover content */
+  [data-radix-popover-content] {
+    max-width: calc(100vw - 2rem) !important;
+  }
+  
+  /* Select content */
+  [data-radix-select-content] {
+    max-width: calc(100vw - 2rem) !important;
+  }
+  
+  /* Smooth momentum scrolling for kanban */
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+  }
+  
+  /* Ensure touch targets are at least 44px */
+  button, [role="button"] {
+    min-height: 36px;
   }
 }
