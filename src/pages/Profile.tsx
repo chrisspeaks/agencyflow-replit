@@ -102,9 +102,14 @@ const Profile = () => {
 
       if (error) throw error;
 
-      toast.success("Password changed successfully!");
+      toast.success("Password changed successfully! Logging you out...");
       setNewPassword("");
       setConfirmPassword("");
+      
+      // Force logout after password change to require re-authentication
+      setTimeout(async () => {
+        await supabase.auth.signOut();
+      }, 1500);
     } catch (error: any) {
       console.error("Error changing password:", error);
       toast.error(error.message || "Failed to change password");
