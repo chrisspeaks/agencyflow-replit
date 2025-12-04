@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { FolderKanban, CheckCircle2, AlertCircle, Calendar } from "lucide-react";
 import { format } from "date-fns";
 
@@ -17,24 +18,14 @@ interface Task {
   title: string;
   due_date: string | null;
   status: string;
+  project_id: string;
   profiles?: {
     full_name: string;
   } | null;
 }
 
-interface DashboardStats {
-  activeProjects: number;
-  pendingTasks: number;
-  overdueTasks: number;
-}
-
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [stats, setStats] = useState<DashboardStats>({
-    activeProjects: 0,
-    pendingTasks: 0,
-    overdueTasks: 0,
-  });
   const [projects, setProjects] = useState<Project[]>([]);
   const [pendingTasks, setPendingTasks] = useState<Task[]>([]);
   const [overdueTasks, setOverdueTasks] = useState<Task[]>([]);
@@ -47,100 +38,93 @@ const Dashboard = () => {
   const fetchDashboardData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        setLoading(false);
+        return;
+      }
 
-      // Check user role
-      const { data: roleData } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .single();
+      // Fetch role and member projects in parallel
+      const [roleResult, memberResult] = await Promise.all([
+        supabase.from("user_roles").select("role").eq("user_id", user.id).maybeSingle(),
+        supabase.from("project_members").select("project_id").eq("user_id", user.id)
+      ]);
 
-      const userRole = roleData?.role;
+      const userRole = roleResult.data?.role;
       const isAdminOrManager = userRole === "admin" || userRole === "manager";
+      const memberProjectIds = memberResult.data?.map(p => p.project_id) || [];
 
-      // Fetch active projects count
-      let projectsQuery = supabase
-        .from("projects")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "active");
-
-      if (!isAdminOrManager) {
-        // Staff: only show projects they're part of
-        const { data: memberProjects } = await supabase
-          .from("project_members")
-          .select("project_id")
-          .eq("user_id", user.id);
-        
-        const projectIds = memberProjects?.map(p => p.project_id) || [];
-        if (projectIds.length === 0) {
-          setStats({ activeProjects: 0, pendingTasks: 0, overdueTasks: 0 });
-          setLoading(false);
-          return;
-        }
-        projectsQuery = projectsQuery.in("id", projectIds);
+      // If staff with no projects, show empty state immediately
+      if (!isAdminOrManager && memberProjectIds.length === 0) {
+        setLoading(false);
+        return;
       }
 
-      const { count: projectsCount } = await projectsQuery;
-
-      // Fetch pending tasks count
-      let pendingQuery = supabase
-        .from("tasks")
-        .select("project_id", { count: "exact", head: true })
-        .neq("status", "Done");
-
+      // Build queries based on role
+      let projectsQuery = supabase.from("projects").select("id, name, brand_color, status").eq("status", "active").limit(5);
+      let tasksQuery = supabase.from("tasks").select("id, title, due_date, status, project_id, profiles:assignee_id(full_name)").neq("status", "Done").limit(10);
+      
       if (!isAdminOrManager) {
-        const { data: memberProjects } = await supabase
-          .from("project_members")
-          .select("project_id")
-          .eq("user_id", user.id);
-        
-        const projectIds = memberProjects?.map(p => p.project_id) || [];
-        if (projectIds.length > 0) {
-          pendingQuery = pendingQuery.in("project_id", projectIds);
-        }
+        projectsQuery = projectsQuery.in("id", memberProjectIds);
+        tasksQuery = tasksQuery.in("project_id", memberProjectIds);
       }
 
-      const { count: pendingCount } = await pendingQuery;
+      // Fetch projects and tasks in parallel
+      const [projectsResult, tasksResult] = await Promise.all([
+        projectsQuery,
+        tasksQuery
+      ]);
 
-      // Fetch overdue tasks count
-      const now = new Date().toISOString();
-      let overdueQuery = supabase
-        .from("tasks")
-        .select("project_id", { count: "exact", head: true })
-        .lt("due_date", now)
-        .neq("status", "Done");
-
-      if (!isAdminOrManager) {
-        const { data: memberProjects } = await supabase
-          .from("project_members")
-          .select("project_id")
-          .eq("user_id", user.id);
-        
-        const projectIds = memberProjects?.map(p => p.project_id) || [];
-        if (projectIds.length > 0) {
-          overdueQuery = overdueQuery.in("project_id", projectIds);
+      setProjects(projectsResult.data || []);
+      
+      const allTasks = tasksResult.data || [];
+      const now = new Date();
+      
+      // Split tasks into pending and overdue
+      const pending: Task[] = [];
+      const overdue: Task[] = [];
+      
+      allTasks.forEach(task => {
+        if (task.due_date && new Date(task.due_date) < now) {
+          overdue.push(task);
+        } else {
+          pending.push(task);
         }
-      }
-
-      const { count: overdueCount } = await overdueQuery;
-
-      setStats({
-        activeProjects: projectsCount || 0,
-        pendingTasks: pendingCount || 0,
-        overdueTasks: overdueCount || 0,
       });
+
+      setPendingTasks(pending.slice(0, 5));
+      setOverdueTasks(overdue.slice(0, 5));
     } catch (error) {
-      console.error("Error fetching dashboard stats:", error);
+      console.error("Error fetching dashboard:", error);
     } finally {
       setLoading(false);
     }
   };
 
+  // Skeleton loading state - shows instantly
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent"></div>
+      <div className="space-y-4 sm:space-y-6 p-1 sm:p-0">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold">Dashboard</h1>
+          <p className="text-muted-foreground text-sm">Agency Overview</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+          {[1, 2, 3].map((i) => (
+            <Card key={i}>
+              <CardHeader className="p-4 sm:p-6 pb-2">
+                <Skeleton className="h-4 w-24" />
+              </CardHeader>
+              <CardContent className="p-4 sm:p-6 pt-0">
+                <Skeleton className="h-8 w-12 mb-2" />
+                <Skeleton className="h-3 w-32 mb-3" />
+                <div className="space-y-2">
+                  <Skeleton className="h-6 w-full" />
+                  <Skeleton className="h-6 w-full" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     );
   }
@@ -159,7 +143,7 @@ const Dashboard = () => {
             <FolderKanban className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent className="p-4 sm:p-6 pt-0">
-            <div className="text-2xl font-bold">{stats.activeProjects}</div>
+            <div className="text-2xl font-bold">{projects.length}</div>
             <p className="text-xs text-muted-foreground mb-3">Currently in progress</p>
             <div className="space-y-1.5">
               {projects.map((project) => (
@@ -172,6 +156,9 @@ const Dashboard = () => {
                   <span className="truncate font-medium">{project.name}</span>
                 </div>
               ))}
+              {projects.length === 0 && (
+                <p className="text-xs text-muted-foreground">No active projects</p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -182,18 +169,26 @@ const Dashboard = () => {
             <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent className="p-4 sm:p-6 pt-0">
-            <div className="text-2xl font-bold">{stats.pendingTasks}</div>
+            <div className="text-2xl font-bold">{pendingTasks.length}</div>
             <p className="text-xs text-muted-foreground mb-3">Awaiting completion</p>
             <div className="space-y-1.5">
               {pendingTasks.map((task) => (
                 <div key={task.id} className="p-1.5 rounded-md bg-muted/50 text-xs">
                   <div className="font-medium truncate">{task.title}</div>
                   <div className="flex items-center gap-2 mt-0.5 text-muted-foreground">
-                    {task.due_date && <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{format(new Date(task.due_date), "MMM d")}</span>}
+                    {task.due_date && (
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {format(new Date(task.due_date), "MMM d")}
+                      </span>
+                    )}
                     {task.profiles && <span className="truncate">• {task.profiles.full_name}</span>}
                   </div>
                 </div>
               ))}
+              {pendingTasks.length === 0 && (
+                <p className="text-xs text-muted-foreground">No pending tasks</p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -204,18 +199,26 @@ const Dashboard = () => {
             <AlertCircle className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent className="p-4 sm:p-6 pt-0">
-            <div className="text-2xl font-bold text-destructive">{stats.overdueTasks}</div>
+            <div className="text-2xl font-bold text-destructive">{overdueTasks.length}</div>
             <p className="text-xs text-muted-foreground mb-3">Need attention</p>
             <div className="space-y-1.5">
               {overdueTasks.map((task) => (
                 <div key={task.id} className="p-1.5 rounded-md bg-destructive/10 border border-destructive/20 text-xs">
                   <div className="font-medium truncate text-destructive">{task.title}</div>
                   <div className="flex items-center gap-2 mt-0.5 text-muted-foreground">
-                    {task.due_date && <span className="flex items-center gap-1 text-destructive"><Calendar className="h-3 w-3" />{format(new Date(task.due_date), "MMM d")}</span>}
+                    {task.due_date && (
+                      <span className="flex items-center gap-1 text-destructive">
+                        <Calendar className="h-3 w-3" />
+                        {format(new Date(task.due_date), "MMM d")}
+                      </span>
+                    )}
                     {task.profiles && <span className="truncate">• {task.profiles.full_name}</span>}
                   </div>
                 </div>
               ))}
+              {overdueTasks.length === 0 && (
+                <p className="text-xs text-muted-foreground">No overdue tasks</p>
+              )}
             </div>
           </CardContent>
         </Card>

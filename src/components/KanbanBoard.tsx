@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { TASK_STATUSES } from "@/config/appConfig";
 import {
@@ -55,7 +56,7 @@ function StatusColumn({ status, tasks, onTaskClick }: StatusColumnProps) {
   return (
     <Card 
       ref={setNodeRef}
-      className={`flex flex-col transition-colors min-w-[250px] sm:min-w-0 ${isOver ? 'ring-2 ring-primary' : ''}`}
+      className={`flex flex-col transition-colors w-[280px] shrink-0 sm:w-auto sm:shrink ${isOver ? 'ring-2 ring-primary' : ''}`}
     >
       <CardHeader className="pb-2 sm:pb-3 p-3 sm:p-6">
         <CardTitle className="text-xs sm:text-sm font-medium flex items-center justify-between">
@@ -100,13 +101,13 @@ export function KanbanBoard({ projectId, refreshKey }: KanbanBoardProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8,
+        distance: 5,
       },
     }),
     useSensor(TouchSensor, {
       activationConstraint: {
-        delay: 200,
-        tolerance: 8,
+        delay: 150,
+        tolerance: 5,
       },
     })
   );
@@ -200,8 +201,18 @@ export function KanbanBoard({ projectId, refreshKey }: KanbanBoardProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      <div className="flex gap-3 sm:gap-6 overflow-x-auto pb-4 sm:pb-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible -mx-2 px-2 sm:mx-0 sm:px-0">
+        {TASK_STATUSES.map((status) => (
+          <Card key={status} className="w-[280px] shrink-0 sm:w-auto sm:shrink">
+            <CardHeader className="pb-2 p-3 sm:p-6">
+              <Skeleton className="h-4 w-20" />
+            </CardHeader>
+            <CardContent className="p-2 sm:p-6 pt-0 space-y-2">
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
+            </CardContent>
+          </Card>
+        ))}
       </div>
     );
   }
@@ -213,8 +224,8 @@ export function KanbanBoard({ projectId, refreshKey }: KanbanBoardProps) {
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        {/* Mobile: horizontal scroll, Desktop: grid */}
-        <div className="flex overflow-x-auto gap-3 sm:gap-6 pb-4 sm:pb-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible">
+        {/* Mobile: horizontal scroll with proper padding, Desktop: grid */}
+        <div className="flex gap-3 sm:gap-6 overflow-x-auto pb-4 sm:pb-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible -mx-2 px-2 sm:mx-0 sm:px-0">
           {TASK_STATUSES.map((status) => {
             const statusTasks = tasks.filter((task) => task.status === status);
             return (
@@ -230,7 +241,7 @@ export function KanbanBoard({ projectId, refreshKey }: KanbanBoardProps) {
 
         <DragOverlay>
           {activeTask ? (
-            <Card className="opacity-90 rotate-3 cursor-grabbing shadow-xl max-w-[250px]">
+            <Card className="opacity-90 rotate-3 cursor-grabbing shadow-xl w-[250px]">
               <CardContent className="p-3 sm:p-4">
                 <h4 className="font-medium mb-2 text-sm">{activeTask.title}</h4>
                 <div className="flex items-center gap-2 flex-wrap">
