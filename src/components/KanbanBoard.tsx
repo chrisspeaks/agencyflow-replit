@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { getAuthHeaders, useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -97,6 +97,7 @@ export function KanbanBoard({ projectId, refreshKey }: KanbanBoardProps) {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   // Touch-friendly sensors for mobile drag and drop
   const sensors = useSensors(
@@ -115,20 +116,27 @@ export function KanbanBoard({ projectId, refreshKey }: KanbanBoardProps) {
 
   const fetchTasks = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from("tasks")
-        .select(`
-          *,
-          profiles:profiles!tasks_assignee_id_fkey (
-            full_name,
-            avatar_url
-          )
-        `)
-        .eq("project_id", projectId)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setTasks(data || []);
+      const response = await fetch(`/api/tasks?projectId=${projectId}`, {
+        headers: getAuthHeaders(),
+      });
+      
+      if (!response.ok) throw new Error("Failed to fetch tasks");
+      
+      const data = await response.json();
+      // Map backend format to frontend format
+      const mappedTasks = data.map((task: any) => ({
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        priority: task.priority,
+        due_date: task.dueDate || task.due_date,
+        is_blocked: task.isBlocked || task.is_blocked || false,
+        assignee_id: task.assigneeId || task.assignee_id,
+        comments: task.comments,
+        profiles: task.profiles || null,
+      }));
+      setTasks(mappedTasks);
     } catch (error: any) {
       console.error("Error fetching tasks:", error);
       toast({
@@ -170,33 +178,34 @@ export function KanbanBoard({ projectId, refreshKey }: KanbanBoardProps) {
     );
 
     try {
-      const { error } = await supabase
-        .from("tasks")
-        .update({ status: newStatus as any })
-        .eq("id", taskId);
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
 
-      if (error) throw error;
+      if (!response.ok) throw new Error("Failed to update task");
 
       // Get task assignees and notify them about status change
-      const { data: assignees } = await supabase
-        .from("task_assignees")
-        .select("user_id")
-        .eq("task_id", taskId);
-
-      const { data: { user } } = await supabase.auth.getUser();
+      const assigneesResponse = await fetch(`/api/tasks/${taskId}/assignees`, {
+        headers: getAuthHeaders(),
+      });
+      const assignees = assigneesResponse.ok ? await assigneesResponse.json() : [];
 
       if (assignees && assignees.length > 0) {
         // Get project name for the notification
-        const { data: projectData } = await supabase
-          .from("projects")
-          .select("name")
-          .eq("id", projectId)
-          .single();
+        const projectResponse = await fetch(`/api/projects/${projectId}`, {
+          headers: getAuthHeaders(),
+        });
+        const projectData = projectResponse.ok ? await projectResponse.json() : null;
 
         const projectName = projectData?.name || "Unknown Project";
 
         // Notify all assignees except the current user
-        assignees.forEach(({ user_id }) => {
+        assignees.forEach(({ user_id }: { user_id: string }) => {
           if (user_id !== user?.id) {
             createNotificationForUser(
               user_id,
