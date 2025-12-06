@@ -203,13 +203,22 @@ router.post("/api/tasks", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Title is required" });
     }
     
+    const rawDueDate = body.due_date || body.dueDate || null;
+    let dueDate: Date | null = null;
+    if (rawDueDate) {
+      dueDate = new Date(rawDueDate);
+      if (isNaN(dueDate.getTime())) {
+        dueDate = null;
+      }
+    }
+    
     const taskData = {
       projectId,
       title,
       description: body.description || null,
       priority: body.priority || "P2-Medium",
       status: body.status || "Todo",
-      dueDate: body.due_date || body.dueDate || null,
+      dueDate,
       isBlocked: body.is_blocked !== undefined ? body.is_blocked : (body.isBlocked || false),
       comments: body.comments || null,
       createdBy: req.user!.id,
@@ -243,7 +252,13 @@ router.patch("/api/tasks/:id", requireAuth, async (req, res) => {
     if (body.status !== undefined) updateData.status = body.status;
     if (body.comments !== undefined) updateData.comments = body.comments;
     if (body.due_date !== undefined || body.dueDate !== undefined) {
-      updateData.dueDate = body.due_date || body.dueDate;
+      const rawDueDate = body.due_date || body.dueDate;
+      if (rawDueDate) {
+        const parsedDate = new Date(rawDueDate);
+        updateData.dueDate = isNaN(parsedDate.getTime()) ? null : parsedDate;
+      } else {
+        updateData.dueDate = null;
+      }
     }
     if (body.is_blocked !== undefined || body.isBlocked !== undefined) {
       updateData.isBlocked = body.is_blocked !== undefined ? body.is_blocked : body.isBlocked;
