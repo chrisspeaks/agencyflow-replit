@@ -245,7 +245,7 @@ export function KanbanBoard({ projectId, refreshKey }: KanbanBoardProps) {
 
   if (loading) {
     return (
-      <div className="flex gap-3 sm:gap-6 overflow-x-auto pb-4 sm:pb-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible -mx-2 px-2 sm:mx-0 sm:px-0">
+      <div className="flex gap-3 sm:gap-6 overflow-x-auto pb-4 sm:pb-0 sm:grid sm:grid-cols-2 lg:grid-cols-5 sm:overflow-visible -mx-2 px-2 sm:mx-0 sm:px-0">
         {TASK_STATUSES.map((status) => (
           <Card key={status} className="w-[280px] shrink-0 sm:w-auto sm:shrink">
             <CardHeader className="pb-2 p-3 sm:p-6">
@@ -269,7 +269,7 @@ export function KanbanBoard({ projectId, refreshKey }: KanbanBoardProps) {
         onDragEnd={handleDragEnd}
       >
         {/* Mobile: horizontal scroll with proper padding, Desktop: grid */}
-        <div className="flex gap-3 sm:gap-6 overflow-x-auto pb-4 sm:pb-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible -mx-2 px-2 sm:mx-0 sm:px-0">
+        <div className="flex gap-3 sm:gap-6 overflow-x-auto pb-4 sm:pb-0 sm:grid sm:grid-cols-2 lg:grid-cols-5 sm:overflow-visible -mx-2 px-2 sm:mx-0 sm:px-0">
           {TASK_STATUSES.map((status) => {
             const statusTasks = tasks.filter((task) => task.status === status);
             return (

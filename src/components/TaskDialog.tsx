@@ -23,10 +23,13 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { TASK_STATUSES, TASK_PRIORITIES } from "@/config/appConfig";
-import { Calendar as CalendarIcon, Loader2 } from "lucide-react";
+import { Calendar as CalendarIcon, Loader2, Lock } from "lucide-react";
 import { format } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
 import { createNotificationForUser } from "@/lib/notifications";
+import { useAuth } from "@/lib/auth";
+import { TaskLogs } from "@/components/TaskLogs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface TaskDialogProps {
   open: boolean;
@@ -50,9 +53,18 @@ export function TaskDialog({
   onTaskCreated,
 }: TaskDialogProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [teamMembers, setTeamMembers] = useState<Profile[]>([]);
   const [projectName, setProjectName] = useState("");
+
+  const userRole = user?.profile?.role;
+  const isAdminOrManager = userRole === "admin" || userRole === "manager";
+  const isTaskCreator = task?.createdBy === user?.id || task?.created_by === user?.id;
+  const isNewTask = !task;
+  
+  const canEditCoreFields = isNewTask || isAdminOrManager || isTaskCreator;
+  const canReassign = isNewTask || isAdminOrManager || isTaskCreator;
 
   const [formData, setFormData] = useState({
     title: "",
@@ -271,7 +283,19 @@ export function TaskDialog({
 
         <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="title" className="text-sm">Title *</Label>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="title" className="text-sm">Title *</Label>
+              {!canEditCoreFields && task && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Lock className="h-3 w-3 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">Only admins, managers, or the task creator can edit this field</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
             <Input
               id="title"
               value={formData.title}
@@ -280,13 +304,26 @@ export function TaskDialog({
               }
               placeholder="Enter task title"
               required
+              disabled={!canEditCoreFields && !!task}
               className="h-9 sm:h-10"
               data-testid="input-task-title"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description" className="text-sm">Description</Label>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="description" className="text-sm">Description</Label>
+              {!canEditCoreFields && task && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Lock className="h-3 w-3 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">Only admins, managers, or the task creator can edit this field</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
             <Textarea
               id="description"
               value={formData.description}
@@ -295,6 +332,7 @@ export function TaskDialog({
               }
               placeholder="Enter task description"
               rows={3}
+              disabled={!canEditCoreFields && !!task}
               className="text-sm"
               data-testid="input-task-description"
             />
@@ -313,6 +351,9 @@ export function TaskDialog({
               className="text-sm"
               data-testid="input-task-comments"
             />
+            {task && (
+              <TaskLogs taskId={task.id} filterType="comment" />
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -338,12 +379,25 @@ export function TaskDialog({
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm">Priority</Label>
+              <div className="flex items-center gap-2">
+                <Label className="text-sm">Priority</Label>
+                {!canEditCoreFields && task && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Lock className="h-3 w-3 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Only admins, managers, or the task creator can edit this field</p>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
               <Select
                 value={formData.priority}
                 onValueChange={(value) =>
                   setFormData({ ...formData, priority: value })
                 }
+                disabled={!canEditCoreFields && !!task}
               >
                 <SelectTrigger className="h-9 sm:h-10" data-testid="select-task-priority">
                   <SelectValue />
@@ -360,7 +414,19 @@ export function TaskDialog({
           </div>
 
           <div className="space-y-2">
-            <Label className="text-sm">Assign To (Multiple)</Label>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">Assign To (Multiple)</Label>
+              {!canReassign && task && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Lock className="h-3 w-3 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">Only admins, managers, or the task creator can reassign</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
             <div className="border rounded-md p-2 sm:p-3 space-y-2 max-h-36 sm:max-h-48 overflow-y-auto">
               {teamMembers.length === 0 ? (
                 <p className="text-xs sm:text-sm text-muted-foreground">
@@ -368,15 +434,17 @@ export function TaskDialog({
                 </p>
               ) : (
                 teamMembers.map((member) => (
-                  <label key={member.id} className="flex items-center gap-2 cursor-pointer py-1">
+                  <label key={member.id} className={`flex items-center gap-2 py-1 ${canReassign || isNewTask ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
                     <Checkbox
                       checked={formData.assignee_ids.includes(member.id)}
                       onCheckedChange={(checked) => {
+                        if (!canReassign && !isNewTask) return;
                         const newIds = checked
                           ? [...formData.assignee_ids, member.id]
                           : formData.assignee_ids.filter(id => id !== member.id);
                         setFormData({ ...formData, assignee_ids: newIds });
                       }}
+                      disabled={!canReassign && !isNewTask}
                       data-testid={`checkbox-assignee-${member.id}`}
                     />
                     <span className="text-xs sm:text-sm">{member.full_name}</span>
@@ -384,15 +452,31 @@ export function TaskDialog({
                 ))
               )}
             </div>
+            {task && (
+              <TaskLogs taskId={task.id} filterType="assignee" />
+            )}
           </div>
 
           <div className="space-y-2">
-            <Label className="text-sm">Due Date</Label>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">Due Date</Label>
+              {!canEditCoreFields && task && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Lock className="h-3 w-3 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">Only admins, managers, or the task creator can edit this field</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
                   className="w-full justify-start text-left font-normal h-9 sm:h-10 text-sm"
+                  disabled={!canEditCoreFields && !!task}
                   data-testid="button-task-due-date"
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
@@ -427,6 +511,12 @@ export function TaskDialog({
             />
             <Label htmlFor="blocked" className="text-sm">Task is blocked</Label>
           </div>
+
+          {task && (
+            <div className="pt-2 border-t">
+              <TaskLogs taskId={task.id} filterType="all" />
+            </div>
+          )}
 
           <DialogFooter className="gap-2 sm:gap-0 pt-2">
             <Button

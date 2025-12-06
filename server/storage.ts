@@ -167,7 +167,34 @@ export class PostgresStorage implements IStorage {
   }
 
   async getTasksByAssignee(userId: string) {
-    return db.select().from(schema.tasks).where(eq(schema.tasks.assigneeId, userId)).orderBy(desc(schema.tasks.createdAt));
+    const taskAssignments = await db
+      .select({ taskId: schema.taskAssignees.taskId })
+      .from(schema.taskAssignees)
+      .where(eq(schema.taskAssignees.userId, userId));
+    
+    if (taskAssignments.length === 0) {
+      return [];
+    }
+    
+    const taskIds = taskAssignments.map(ta => ta.taskId);
+    const tasks = await db
+      .select()
+      .from(schema.tasks)
+      .where(inArray(schema.tasks.id, taskIds))
+      .orderBy(desc(schema.tasks.createdAt));
+    
+    const tasksWithProject = await Promise.all(
+      tasks.map(async (task) => {
+        const project = await this.getProject(task.projectId);
+        return {
+          ...task,
+          projectName: project?.name,
+          projectColor: project?.brandColor,
+        };
+      })
+    );
+    
+    return tasksWithProject;
   }
 
   async createTask(task: InsertTask) {

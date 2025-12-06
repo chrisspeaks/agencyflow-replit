@@ -70,7 +70,8 @@ export default function MyWorkbench() {
 
   const todoTasks = tasks.filter((t) => t.status === "Todo");
   const inProgressTasks = tasks.filter((t) => t.status === "In Progress");
-  const reviewTasks = tasks.filter((t) => t.status === "Internal Review");
+  const internalReviewTasks = tasks.filter((t) => t.status === "Internal Review");
+  const pendingClientReviewTasks = tasks.filter((t) => t.status === "Pending Client Review");
   const doneTasks = tasks.filter((t) => t.status === "Done");
 
   if (isLoading) {
@@ -116,7 +117,7 @@ export default function MyWorkbench() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium">To Do</CardTitle>
@@ -137,10 +138,19 @@ export default function MyWorkbench() {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">In Review</CardTitle>
+              <CardTitle className="text-sm font-medium">Internal Review</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-review-count">{reviewTasks.length}</div>
+              <div className="text-2xl font-bold" data-testid="text-internal-review-count">{internalReviewTasks.length}</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium">Client Review</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold" data-testid="text-client-review-count">{pendingClientReviewTasks.length}</div>
             </CardContent>
           </Card>
 
