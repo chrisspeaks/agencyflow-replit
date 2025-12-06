@@ -17,7 +17,7 @@ export async function setupVite(app: Express, server: any) {
 
   app.use(vite.middlewares);
 
-  app.get("/*", async (req, res, next) => {
+  app.get("/{*splat}", async (req, res, next) => {
     const url = req.originalUrl;
 
     try {
@@ -45,7 +45,7 @@ export async function serveStatic(app: Express) {
 
   app.use(express.static(distPath));
 
-  app.get("/*", (_req, res) => {
+  app.get("/{*splat}", (_req, res) => {
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }
