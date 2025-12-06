@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { getAuthHeaders } from "@/lib/auth";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,10 +17,8 @@ interface Task {
   is_blocked: boolean;
   assignee_id: string | null;
   comments: string | null;
-  profiles?: {
-    full_name: string;
-    avatar_url: string | null;
-  };
+  assignee_name?: string;
+  assignee_avatar?: string | null;
 }
 
 interface CalendarViewProps {
@@ -42,20 +40,13 @@ export function CalendarView({ projectId, refreshKey }: CalendarViewProps) {
 
   const fetchTasks = async () => {
     try {
-      const { data, error } = await supabase
-        .from("tasks")
-        .select(`
-          *,
-          profiles:profiles!tasks_assignee_id_fkey (
-            full_name,
-            avatar_url
-          )
-        `)
-        .eq("project_id", projectId)
-        .not("due_date", "is", null)
-        .order("due_date", { ascending: true });
-
-      if (error) throw error;
+      const response = await fetch(`/api/projects/${projectId}/tasks?hasDueDate=true`, {
+        headers: getAuthHeaders(),
+      });
+      
+      if (!response.ok) throw new Error("Failed to fetch tasks");
+      
+      const data = await response.json();
       setTasks(data || []);
     } catch (error: any) {
       console.error("Error fetching tasks:", error);
@@ -166,9 +157,9 @@ export function CalendarView({ projectId, refreshKey }: CalendarViewProps) {
                         <Badge variant="outline" className="text-xs">
                           {task.status}
                         </Badge>
-                        {task.profiles && (
+                        {task.assignee_name && (
                           <span className="text-xs text-muted-foreground">
-                            {task.profiles.full_name}
+                            {task.assignee_name}
                           </span>
                         )}
                       </div>

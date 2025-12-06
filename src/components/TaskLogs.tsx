@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { getAuthHeaders } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -14,9 +14,7 @@ interface TaskLog {
   details: any;
   created_at: string;
   user_id: string;
-  profiles?: {
-    full_name: string;
-  };
+  user_name?: string;
 }
 
 interface TaskLogsProps {
@@ -32,23 +30,17 @@ export function TaskLogs({ taskId, filterType = "all" }: TaskLogsProps) {
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      let query = supabase
-        .from("task_logs")
-        .select(`
-          *,
-          profiles:user_id (
-            full_name
-          )
-        `)
-        .eq("task_id", taskId)
-        .order("created_at", { ascending: false });
-
-      if (filterType !== "all") {
-        query = query.eq("action_type", filterType);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
+      const url = filterType === "all" 
+        ? `/api/tasks/${taskId}/logs`
+        : `/api/tasks/${taskId}/logs?type=${filterType}`;
+      
+      const response = await fetch(url, {
+        headers: getAuthHeaders(),
+      });
+      
+      if (!response.ok) throw new Error("Failed to fetch logs");
+      
+      const data = await response.json();
       setLogs(data || []);
     } catch (error) {
       console.error("Error fetching logs:", error);
@@ -154,7 +146,7 @@ export function TaskLogs({ taskId, filterType = "all" }: TaskLogsProps) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1">
                     <User className="h-3 w-3 text-muted-foreground" />
-                    <span className="font-medium">{log.profiles?.full_name || "Unknown"}</span>
+                    <span className="font-medium">{log.user_name || "Unknown"}</span>
                     <span className="text-muted-foreground">{getActionLabel(log)}</span>
                   </div>
                   <div className="text-muted-foreground mt-0.5">
