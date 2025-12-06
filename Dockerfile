@@ -1,40 +1,35 @@
-# Stage 1: Build the Website
-FROM node:20-alpine as build
+# Stage 1: Build frontend
+FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
-
-# Install dependencies (using 'npm ci' for clean install)
 RUN npm ci
 
-# Copy source code
 COPY . .
 
-# --- VARIABLES SECTION ---
-# We declare that we expect these variables from Dokploy
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
-
-# We inject them into the build process
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
-# -------------------------
 
-# Build the React app
 RUN npm run build
 
-# Stage 2: Serve the Website
-FROM nginx:alpine
+# Stage 2: Production
+FROM node:20-alpine AS production
+WORKDIR /app
 
-# Clean default nginx files
-RUN rm -rf /usr/share/nginx/html/*
+COPY package*.json ./
+RUN npm ci --omit=dev && npm install tsx
 
-# Copy the built website from Stage 1
-COPY --from=build /app/dist /usr/share/nginx/html
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/server ./server
+COPY --from=builder /app/shared ./shared
+COPY --from=builder /app/drizzle ./drizzle
+COPY --from=builder /app/tsconfig.json ./
 
-# Copy our custom nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+ENV NODE_ENV=production
+ENV PORT=5000
 
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+EXPOSE 5000
+
+CMD ["npx", "tsx", "server/index.js"]

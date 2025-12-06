@@ -229,83 +229,53 @@ The dashboard shows three main metrics:
 ## Email Configuration
 
 ### SMTP Settings
-The system uses SMTP for sending emails. Required secrets:
+The system uses nodemailer with SMTP for sending emails from the Express backend. Required environment variables:
 
 - `SMTP_HOST` - Your SMTP server hostname
 - `SMTP_PORT` - SMTP port (default: 465 for SSL)
 - `SMTP_USER` - SMTP username/email
-- `SMTP_PASSWORD` - SMTP password
+- `SMTP_PASSWORD` - SMTP password (stored as secret)
 
 ### Setting Up Email
-1. Configure SMTP secrets in Supabase Dashboard
-2. Go to: Project Settings → Edge Functions → Secrets
-3. Add the four SMTP variables listed above
+1. Set SMTP environment variables in your deployment environment
+2. For Replit: Add them in the Secrets tab
+3. For Docker: Pass them as environment variables
+4. For production: Configure in your deployment platform
 
-### Edge Functions for Email
-The system has three edge functions for sending emails:
+### Email Service (Backend)
+Email sending is handled by `server/email.ts` using nodemailer:
 
-1. **send-task-notification** (deprecated, use send-assignment-notification)
-   - Legacy function for task assignments
-   - Location: `supabase/functions/send-task-notification/index.ts`
+1. **sendNotificationEmail** - General notifications
+   - Triggered when in-app notifications are created
+   - Sends email with title and message
 
-2. **send-assignment-notification** (recommended)
+2. **sendTaskAssignmentEmail** - Task assignments
    - Handles both assignment and unassignment emails
-   - Location: `supabase/functions/send-assignment-notification/index.ts`
+   - Triggered from task assignee routes
    - Supports "assigned" and "unassigned" actions
 
-3. **send-project-member-notification**
+3. **sendProjectMemberEmail** - Project member changes
    - Handles project member additions and removals
-   - Location: `supabase/functions/send-project-member-notification/index.ts`
+   - Triggered from project member routes
    - Supports "added" and "removed" actions
+
+### Legacy Edge Functions (Supabase)
+The `supabase/functions/` directory contains edge functions for Supabase deployments:
+- These are NOT used when deploying with Docker/Dokploy
+- They are maintained for Supabase-specific deployments only
 
 ---
 
 ## Customizing Email Templates
 
-### Task Assignment Email Template
-**File**: `supabase/functions/send-assignment-notification/index.ts`
+### Email templates location
+**File**: `server/email.ts`
 
-**For "assigned" action**, edit lines in the `body` variable:
-```typescript
-const body = action === "assigned" ? `
-  <html>
-    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-      <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #0f172a;">Task Assigned to You</h2>
-        <p>Hi ${assigneeName},</p>
-        <!-- Customize this content -->
-      </div>
-    </body>
-  </html>
-` : /* unassignment template */
-```
+All email templates are in the `server/email.ts` file. Edit the HTML strings in each function:
 
-### Task Unassignment Email Template
-**File**: `supabase/functions/send-assignment-notification/index.ts`
-
-Edit the second part of the ternary in the `body` variable (after the `:`)
-
-### Project Member Addition Email Template
-**File**: `supabase/functions/send-project-member-notification/index.ts`
-
-**For "added" action**, edit the first ternary option:
-```typescript
-const body = action === "added" ? `
-  <html>
-    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-      <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #0f172a;">Welcome to the Project Team!</h2>
-        <!-- Customize this content -->
-      </div>
-    </body>
-  </html>
-` : /* removal template */
-```
-
-### Project Member Removal Email Template
-**File**: `supabase/functions/send-project-member-notification/index.ts`
-
-Edit the second part of the ternary in the `body` variable
+- `sendTaskAssignmentEmail` - Task assignment/unassignment templates
+- `sendProjectMemberEmail` - Project member add/remove templates
+- `sendNotificationEmail` - General notification template
 
 ### Email Styling Tips
 - Use inline styles (email clients don't support external CSS well)

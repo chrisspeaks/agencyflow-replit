@@ -50,8 +50,6 @@ externalPort = 3001
 [userenv]
 
 [userenv.shared]
-VITE_SUPABASE_URL = "https://qewuorfsbdcakfraxlev.supabase.co"
-VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFld3VvcmZzYmRjYWtmcmF4bGV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzNTI2MzEsImV4cCI6MjA3OTkyODYzMX0.bONmcHdFpRiwBxLTX9E78GUAjDu4JeF5SQWJeCRedfg"
 EXTERNAL_DATABASE_URL = "postgresql://agencyflow:Cris0037.@157.173.106.6:2689/agencyflow"
 SMTP_HOST = "mail.cyberslide.net"
 SMTP_PORT = "465"

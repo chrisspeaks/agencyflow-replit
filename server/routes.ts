@@ -1,8 +1,13 @@
 import { Router } from "express";
 import { storage } from "./storage";
 import { requireAuth, requireRole } from "./auth";
+import { sendNotificationEmail, sendTaskAssignmentEmail, sendProjectMemberEmail } from "./email";
 
 const router = Router();
+
+router.get("/api/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
 
 router.get("/api/user/role", requireAuth, async (req, res) => {
   try {
@@ -121,10 +126,23 @@ router.get("/api/projects/:projectId/members", requireAuth, async (req, res) => 
 
 router.post("/api/projects/:projectId/members", requireAuth, requireRole("admin", "manager"), async (req, res) => {
   try {
+    const project = await storage.getProject(req.params.projectId);
+    const profile = await storage.getProfile(req.body.userId);
+    
     await storage.addProjectMember({
       projectId: req.params.projectId,
       userId: req.body.userId,
     });
+    
+    if (profile?.email && project) {
+      sendProjectMemberEmail({
+        memberEmail: profile.email,
+        memberName: profile.fullName || profile.email,
+        projectName: project.name,
+        action: "added",
+      }).catch(err => console.error("Project member email error:", err));
+    }
+    
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -133,7 +151,20 @@ router.post("/api/projects/:projectId/members", requireAuth, requireRole("admin"
 
 router.delete("/api/projects/:projectId/members/:userId", requireAuth, requireRole("admin", "manager"), async (req, res) => {
   try {
+    const project = await storage.getProject(req.params.projectId);
+    const profile = await storage.getProfile(req.params.userId);
+    
     await storage.removeProjectMember(req.params.projectId, req.params.userId);
+    
+    if (profile?.email && project) {
+      sendProjectMemberEmail({
+        memberEmail: profile.email,
+        memberName: profile.fullName || profile.email,
+        projectName: project.name,
+        action: "removed",
+      }).catch(err => console.error("Project member removal email error:", err));
+    }
+    
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -240,11 +271,31 @@ router.get("/api/tasks/:taskId/assignees", requireAuth, async (req, res) => {
 router.post("/api/tasks/:taskId/assignees", requireAuth, async (req, res) => {
   try {
     const { userIds } = req.body;
+    const task = await storage.getTask(req.params.taskId);
+    let projectName = "Project";
+    if (task?.projectId) {
+      const project = await storage.getProject(task.projectId);
+      projectName = project?.name || "Project";
+    }
+    
     for (const userId of userIds) {
       await storage.addTaskAssignee({
         taskId: req.params.taskId,
         userId,
       });
+      
+      const profile = await storage.getProfile(userId);
+      if (profile?.email && task) {
+        sendTaskAssignmentEmail({
+          taskTitle: task.title,
+          assigneeEmail: profile.email,
+          assigneeName: profile.fullName || profile.email,
+          projectName,
+          dueDate: task.dueDate || undefined,
+          priority: task.priority || "medium",
+          action: "assigned",
+        }).catch(err => console.error("Task assignment email error:", err));
+      }
     }
     res.json({ success: true });
   } catch (error: any) {
@@ -254,7 +305,27 @@ router.post("/api/tasks/:taskId/assignees", requireAuth, async (req, res) => {
 
 router.delete("/api/tasks/:taskId/assignees/:userId", requireAuth, async (req, res) => {
   try {
+    const task = await storage.getTask(req.params.taskId);
+    const profile = await storage.getProfile(req.params.userId);
+    
     await storage.removeTaskAssignee(req.params.taskId, req.params.userId);
+    
+    if (profile?.email && task) {
+      let projectName = "Project";
+      if (task.projectId) {
+        const project = await storage.getProject(task.projectId);
+        projectName = project?.name || "Project";
+      }
+      sendTaskAssignmentEmail({
+        taskTitle: task.title,
+        assigneeEmail: profile.email,
+        assigneeName: profile.fullName || profile.email,
+        projectName,
+        priority: task.priority || "medium",
+        action: "unassigned",
+      }).catch(err => console.error("Task unassignment email error:", err));
+    }
+    
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -272,7 +343,26 @@ router.get("/api/notifications", requireAuth, async (req, res) => {
 
 router.post("/api/notifications", requireAuth, async (req, res) => {
   try {
+    const { userId, title, message, type, link } = req.body;
     await storage.createNotification(req.body);
+    
+    if (userId && title) {
+      try {
+        const profile = await storage.getProfile(userId);
+        if (profile?.email) {
+          sendNotificationEmail({
+            email: profile.email,
+            name: profile.fullName || profile.email,
+            title: title || "Notification",
+            message: message || "",
+            link,
+          }).catch(err => console.error("Email notification error:", err));
+        }
+      } catch (emailErr) {
+        console.error("Failed to send email notification:", emailErr);
+      }
+    }
+    
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
