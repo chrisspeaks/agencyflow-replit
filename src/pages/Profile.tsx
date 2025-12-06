@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useState } from "react";
+import { useAuth } from "@/lib/auth";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -11,66 +12,42 @@ import { toast } from "sonner";
 import { Eye, EyeOff, Lock } from "lucide-react";
 
 const Profile = () => {
-  const [loading, setLoading] = useState(true);
+  const { user, isLoading, refreshUser } = useAuth();
   const [saving, setSaving] = useState(false);
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [avatarUrl, setAvatarUrl] = useState("");
-  const [roles, setRoles] = useState<string[]>([]);
+  const [fullName, setFullName] = useState(user?.profile?.fullName || "");
+  const [avatarUrl, setAvatarUrl] = useState(user?.profile?.avatarUrl || "");
   
   // Password change state
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
-
-  const fetchProfile = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Fetch profile and roles in parallel
-      const [profileResult, rolesResult] = await Promise.all([
-        supabase.from("profiles").select("*").eq("id", user.id).single(),
-        supabase.from("user_roles").select("role").eq("user_id", user.id)
-      ]);
-
-      if (profileResult.data) {
-        setFullName(profileResult.data.full_name || "");
-        setEmail(profileResult.data.email || "");
-        setAvatarUrl(profileResult.data.avatar_url || "");
-      }
-      setRoles(rolesResult.data?.map((r) => r.role) || []);
-    } catch (error) {
-      console.error("Error fetching profile:", error);
-      toast.error("Failed to load profile");
-    } finally {
-      setLoading(false);
+  // Update local state when user loads
+  useState(() => {
+    if (user?.profile) {
+      setFullName(user.profile.fullName);
+      setAvatarUrl(user.profile.avatarUrl || "");
     }
-  };
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
     setSaving(true);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      await apiRequest(`/api/profiles/${user.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          fullName,
+          avatarUrl: avatarUrl || null,
+        }),
+      });
 
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          full_name: fullName,
-          avatar_url: avatarUrl || null,
-        })
-        .eq("id", user.id);
-
-      if (error) throw error;
-
+      await refreshUser();
+      queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
       toast.success("Profile updated successfully!");
     } catch (error: any) {
       console.error("Error updating profile:", error);
@@ -96,20 +73,15 @@ const Profile = () => {
     setChangingPassword(true);
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword
+      await apiRequest("/api/auth/change-password", {
+        method: "POST",
+        body: JSON.stringify({ currentPassword, newPassword }),
       });
 
-      if (error) throw error;
-
-      toast.success("Password changed successfully! Logging you out...");
+      toast.success("Password changed successfully!");
+      setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      
-      // Force logout after password change to require re-authentication
-      setTimeout(async () => {
-        await supabase.auth.signOut();
-      }, 1500);
     } catch (error: any) {
       console.error("Error changing password:", error);
       toast.error(error.message || "Failed to change password");
@@ -118,7 +90,7 @@ const Profile = () => {
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-6 max-w-2xl px-2 sm:px-0">
         <div>
@@ -139,6 +111,8 @@ const Profile = () => {
     );
   }
 
+  const roles = user?.roles || [];
+
   return (
     <div className="space-y-6 max-w-2xl px-2 sm:px-0">
       <div>
@@ -157,7 +131,7 @@ const Profile = () => {
               <Avatar className="h-20 w-20 sm:h-24 sm:w-24">
                 <AvatarImage src={avatarUrl} />
                 <AvatarFallback className="text-xl sm:text-2xl">
-                  {fullName
+                  {(fullName || user?.profile?.fullName || "")
                     .split(" ")
                     .map((n) => n[0])
                     .join("")
@@ -172,6 +146,7 @@ const Profile = () => {
                   value={avatarUrl}
                   onChange={(e) => setAvatarUrl(e.target.value)}
                   placeholder="https://example.com/avatar.jpg"
+                  data-testid="input-avatar-url"
                 />
               </div>
             </div>
@@ -184,12 +159,13 @@ const Profile = () => {
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="John Doe"
                 required
+                data-testid="input-full-name"
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={email} disabled className="bg-muted" />
+              <Input id="email" type="email" value={user?.email || ""} disabled className="bg-muted" data-testid="input-email" />
               <p className="text-xs text-muted-foreground">Email cannot be changed</p>
             </div>
 
@@ -201,13 +177,16 @@ const Profile = () => {
                     {role}
                   </Badge>
                 ))}
-                {roles.length === 0 && (
+                {user?.profile?.role && !roles.includes(user.profile.role) && (
+                  <Badge variant="secondary">{user.profile.role}</Badge>
+                )}
+                {roles.length === 0 && !user?.profile?.role && (
                   <Badge variant="secondary">No roles assigned</Badge>
                 )}
               </div>
             </div>
 
-            <Button type="submit" disabled={saving} className="w-full sm:w-auto">
+            <Button type="submit" disabled={saving} className="w-full sm:w-auto" data-testid="button-save-profile">
               {saving ? "Saving..." : "Save Changes"}
             </Button>
           </form>
@@ -225,6 +204,19 @@ const Profile = () => {
         <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
           <form onSubmit={handlePasswordChange} className="space-y-4">
             <div className="space-y-2">
+              <Label htmlFor="currentPassword">Current Password</Label>
+              <Input
+                id="currentPassword"
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Enter current password"
+                required
+                data-testid="input-current-password"
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="newPassword">New Password</Label>
               <div className="relative">
                 <Input
@@ -235,6 +227,7 @@ const Profile = () => {
                   placeholder="Enter new password"
                   required
                   minLength={6}
+                  data-testid="input-new-password"
                 />
                 <Button
                   type="button"
@@ -242,6 +235,7 @@ const Profile = () => {
                   size="icon"
                   className="absolute right-0 top-0 h-full"
                   onClick={() => setShowNewPassword(!showNewPassword)}
+                  data-testid="button-toggle-password"
                 >
                   {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
@@ -258,10 +252,11 @@ const Profile = () => {
                 placeholder="Confirm new password"
                 required
                 minLength={6}
+                data-testid="input-confirm-password"
               />
             </div>
 
-            <Button type="submit" disabled={changingPassword} className="w-full sm:w-auto">
+            <Button type="submit" disabled={changingPassword} className="w-full sm:w-auto" data-testid="button-change-password">
               {changingPassword ? "Changing..." : "Change Password"}
             </Button>
           </form>

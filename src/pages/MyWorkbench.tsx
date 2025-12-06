@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Clock, AlertCircle, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { TaskDialog } from "@/components/TaskDialog";
@@ -14,62 +14,26 @@ interface Task {
   description: string | null;
   status: string;
   priority: string;
-  due_date: string | null;
-  is_blocked: boolean;
-  project_id: string;
+  dueDate: string | null;
+  isBlocked: boolean;
+  projectId: string;
   comments: string | null;
-  projects: {
-    name: string;
-    brand_color: string;
-  };
+  projectName?: string;
+  projectColor?: string;
 }
 
 export default function MyWorkbench() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const { toast } = useToast();
 
-  useEffect(() => {
-    fetchMyTasks();
-  }, []);
-
-  const fetchMyTasks = async () => {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data, error } = await supabase
-        .from("tasks")
-        .select(`
-          *,
-          projects (
-            name,
-            brand_color
-          )
-        `)
-        .eq("assignee_id", user.id)
-        .order("due_date", { ascending: true });
-
-      if (error) throw error;
-      setTasks(data || []);
-    } catch (error: any) {
-      console.error("Error fetching tasks:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load your tasks",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: tasks = [], isLoading, refetch } = useQuery<Task[]>({
+    queryKey: ["/api/tasks", "assignee", user?.id],
+    enabled: !!user,
+  });
 
   const handleTaskUpdated = () => {
-    fetchMyTasks();
+    refetch();
     setIsEditDialogOpen(false);
   };
 
@@ -97,10 +61,35 @@ export default function MyWorkbench() {
   const reviewTasks = tasks.filter((t) => t.status === "Internal Review");
   const doneTasks = tasks.filter((t) => t.status === "Done");
 
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      <div className="container mx-auto p-6 space-y-6">
+        <div>
+          <Skeleton className="h-8 w-48 mb-2" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i}>
+              <CardHeader className="pb-3">
+                <Skeleton className="h-4 w-20" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-12" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-24" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-24 w-full" />
+            ))}
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -121,7 +110,7 @@ export default function MyWorkbench() {
               <CardTitle className="text-sm font-medium">To Do</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{todoTasks.length}</div>
+              <div className="text-2xl font-bold" data-testid="text-todo-count">{todoTasks.length}</div>
             </CardContent>
           </Card>
 
@@ -130,7 +119,7 @@ export default function MyWorkbench() {
               <CardTitle className="text-sm font-medium">In Progress</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{inProgressTasks.length}</div>
+              <div className="text-2xl font-bold" data-testid="text-inprogress-count">{inProgressTasks.length}</div>
             </CardContent>
           </Card>
 
@@ -139,7 +128,7 @@ export default function MyWorkbench() {
               <CardTitle className="text-sm font-medium">In Review</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{reviewTasks.length}</div>
+              <div className="text-2xl font-bold" data-testid="text-review-count">{reviewTasks.length}</div>
             </CardContent>
           </Card>
 
@@ -148,7 +137,7 @@ export default function MyWorkbench() {
               <CardTitle className="text-sm font-medium">Completed</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{doneTasks.length}</div>
+              <div className="text-2xl font-bold" data-testid="text-done-count">{doneTasks.length}</div>
             </CardContent>
           </Card>
         </div>
@@ -172,6 +161,7 @@ export default function MyWorkbench() {
                       setSelectedTask(task);
                       setIsEditDialogOpen(true);
                     }}
+                    data-testid={`card-task-${task.id}`}
                   >
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between gap-4">
@@ -186,23 +176,25 @@ export default function MyWorkbench() {
                             </p>
                           )}
                           <div className="flex items-center gap-2 flex-wrap">
-                            <Badge
-                              variant="outline"
-                              className="text-xs"
-                              style={{
-                                borderColor: task.projects.brand_color,
-                                color: task.projects.brand_color,
-                              }}
-                            >
-                              {task.projects.name}
-                            </Badge>
+                            {task.projectName && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs"
+                                style={{
+                                  borderColor: task.projectColor || "#888",
+                                  color: task.projectColor || "#888",
+                                }}
+                              >
+                                {task.projectName}
+                              </Badge>
+                            )}
                             <Badge variant={getPriorityColor(task.priority)} className="text-xs">
                               {task.priority}
                             </Badge>
                             <Badge variant="secondary" className="text-xs">
                               {task.status}
                             </Badge>
-                            {task.is_blocked && (
+                            {task.isBlocked && (
                               <Badge variant="destructive" className="text-xs">
                                 <AlertCircle className="h-3 w-3 mr-1" />
                                 Blocked
@@ -210,10 +202,10 @@ export default function MyWorkbench() {
                             )}
                           </div>
                         </div>
-                        {task.due_date && (
+                        {task.dueDate && (
                           <div className="flex items-center gap-1 text-sm text-muted-foreground shrink-0">
                             <Clock className="h-4 w-4" />
-                            <span>{format(new Date(task.due_date), "MMM dd")}</span>
+                            <span>{format(new Date(task.dueDate), "MMM dd")}</span>
                           </div>
                         )}
                       </div>
@@ -230,7 +222,7 @@ export default function MyWorkbench() {
         <TaskDialog
           open={isEditDialogOpen}
           onOpenChange={setIsEditDialogOpen}
-          projectId={selectedTask.project_id}
+          projectId={selectedTask.projectId}
           task={selectedTask}
           onTaskCreated={handleTaskUpdated}
         />

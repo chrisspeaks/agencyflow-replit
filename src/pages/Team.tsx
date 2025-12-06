@@ -1,40 +1,22 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface Profile {
   id: string;
-  full_name: string;
+  fullName: string;
   email: string;
   role: string;
-  avatar_url: string | null;
+  avatarUrl: string | null;
+  isActive: boolean;
 }
 
 const Team = () => {
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchTeamMembers();
-  }, []);
-
-  const fetchTeamMembers = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .order("full_name");
-
-      if (error) throw error;
-      setProfiles(data || []);
-    } catch (error) {
-      console.error("Error fetching team members:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: profiles = [], isLoading } = useQuery<Profile[]>({
+    queryKey: ["/api/profiles"],
+  });
 
   const getRoleColor = (role: string) => {
     switch (role) {
@@ -47,13 +29,37 @@ const Team = () => {
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent"></div>
+      <div className="space-y-6">
+        <div>
+          <Skeleton className="h-8 w-32 mb-2" />
+          <Skeleton className="h-4 w-48" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[1, 2, 3].map((i) => (
+            <Card key={i}>
+              <CardHeader>
+                <div className="flex items-center gap-4">
+                  <Skeleton className="h-12 w-12 rounded-full" />
+                  <div className="flex-1">
+                    <Skeleton className="h-5 w-32 mb-2" />
+                    <Skeleton className="h-4 w-40" />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-6 w-16" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     );
   }
+
+  // Filter to only show active profiles
+  const activeProfiles = profiles.filter(p => p.isActive);
 
   return (
     <div className="space-y-6">
@@ -63,14 +69,14 @@ const Team = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {profiles.map((profile) => (
+        {activeProfiles.map((profile) => (
           <Card key={profile.id} className="card-hover">
             <CardHeader>
               <div className="flex items-center gap-4">
                 <Avatar className="h-12 w-12">
-                  <AvatarImage src={profile.avatar_url || ""} alt={profile.full_name} />
+                  <AvatarImage src={profile.avatarUrl || ""} alt={profile.fullName} />
                   <AvatarFallback>
-                    {profile.full_name
+                    {profile.fullName
                       .split(" ")
                       .map((n) => n[0])
                       .join("")
@@ -78,7 +84,7 @@ const Team = () => {
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
-                  <CardTitle className="text-lg">{profile.full_name}</CardTitle>
+                  <CardTitle className="text-lg">{profile.fullName}</CardTitle>
                   <p className="text-sm text-muted-foreground">{profile.email}</p>
                 </div>
               </div>

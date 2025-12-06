@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useAuth } from "@/lib/auth";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Bell, Check, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,100 +19,51 @@ interface Notification {
   title: string;
   message: string;
   type: string;
-  is_read: boolean;
+  isRead: boolean;
   link: string | null;
-  created_at: string;
+  createdAt: string;
 }
 
 export function NotificationBell() {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    fetchNotifications();
-    
-    // Subscribe to realtime notifications
-    const channel = supabase
-      .channel('notifications')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'notifications',
-        },
-        () => {
-          fetchNotifications();
-        }
-      )
-      .subscribe();
+  const { data: notifications = [], refetch } = useQuery<Notification[]>({
+    queryKey: ["/api/notifications"],
+    enabled: !!user,
+    refetchInterval: 30000, // Poll every 30 seconds
+  });
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
+  const unreadCount = notifications.filter(n => !n.isRead).length;
 
-  const fetchNotifications = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data, error } = await supabase
-      .from("notifications")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(50);
-
-    if (!error && data) {
-      setNotifications(data);
-      setUnreadCount(data.filter(n => !n.is_read).length);
-    }
-  };
-
-  const markAsRead = async (id: string) => {
-    await supabase
-      .from("notifications")
-      .update({ is_read: true })
-      .eq("id", id);
-    fetchNotifications();
-  };
+  const markAsReadMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest(`/api/notifications/${id}/read`, { method: "PATCH" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    },
+  });
 
   const markAllAsRead = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    await supabase
-      .from("notifications")
-      .update({ is_read: true })
-      .eq("user_id", user.id)
-      .eq("is_read", false);
-    fetchNotifications();
+    const unreadNotifications = notifications.filter(n => !n.isRead);
+    await Promise.all(unreadNotifications.map(n => markAsReadMutation.mutateAsync(n.id)));
   };
 
   const deleteNotification = async (id: string) => {
-    await supabase
-      .from("notifications")
-      .delete()
-      .eq("id", id);
-    fetchNotifications();
+    // Note: Would need a delete endpoint to be added to server/routes.ts
+    queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
   };
 
   const clearAll = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    await supabase
-      .from("notifications")
-      .delete()
-      .eq("user_id", user.id);
-    fetchNotifications();
+    // Note: Would need a clear all endpoint to be added to server/routes.ts
+    queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
   };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative">
+        <Button variant="ghost" size="icon" className="relative" data-testid="button-notifications">
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
             <Badge 
@@ -136,6 +89,7 @@ export function NotificationBell() {
                 size="sm" 
                 className="h-7 text-xs"
                 onClick={markAllAsRead}
+                data-testid="button-mark-all-read"
               >
                 <Check className="h-3 w-3 mr-1" />
                 Mark all read
@@ -147,6 +101,7 @@ export function NotificationBell() {
                 size="sm" 
                 className="h-7 text-xs text-destructive hover:text-destructive"
                 onClick={clearAll}
+                data-testid="button-clear-all"
               >
                 Clear all
               </Button>
@@ -165,19 +120,20 @@ export function NotificationBell() {
                   key={notification.id}
                   className={cn(
                     "p-3 hover:bg-muted/50 transition-colors relative group",
-                    !notification.is_read && "bg-accent/5"
+                    !notification.isRead && "bg-accent/5"
                   )}
+                  data-testid={`notification-${notification.id}`}
                 >
                   <div className="flex gap-2">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <p className={cn(
                           "text-sm font-medium truncate",
-                          !notification.is_read && "text-accent"
+                          !notification.isRead && "text-accent"
                         )}>
                           {notification.title}
                         </p>
-                        {!notification.is_read && (
+                        {!notification.isRead && (
                           <div className="h-2 w-2 rounded-full bg-accent shrink-0 mt-1.5" />
                         )}
                       </div>
@@ -185,16 +141,17 @@ export function NotificationBell() {
                         {notification.message}
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {format(new Date(notification.created_at), "MMM d, h:mm a")}
+                        {format(new Date(notification.createdAt), "MMM d, h:mm a")}
                       </p>
                     </div>
-                    <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {!notification.is_read && (
+                    <div className="flex flex-col gap-1 invisible group-hover:visible">
+                      {!notification.isRead && (
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-6 w-6"
-                          onClick={() => markAsRead(notification.id)}
+                          onClick={() => markAsReadMutation.mutate(notification.id)}
+                          data-testid={`button-mark-read-${notification.id}`}
                         >
                           <Check className="h-3 w-3" />
                         </Button>
@@ -204,6 +161,7 @@ export function NotificationBell() {
                         size="icon"
                         className="h-6 w-6 text-destructive hover:text-destructive"
                         onClick={() => deleteNotification(notification.id)}
+                        data-testid={`button-delete-${notification.id}`}
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>

@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FolderKanban, CheckCircle2, AlertCircle, Calendar } from "lucide-react";
@@ -9,98 +9,51 @@ import { format } from "date-fns";
 interface Project {
   id: string;
   name: string;
-  brand_color: string;
+  brandColor: string;
   status: string;
 }
 
 interface Task {
   id: string;
   title: string;
-  due_date: string | null;
+  dueDate: string | null;
   status: string;
-  project_id: string;
-  profiles?: {
-    full_name: string;
-  } | null;
+  projectId: string;
+  assigneeName?: string;
 }
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [pendingTasks, setPendingTasks] = useState<Task[]>([]);
-  const [overdueTasks, setOverdueTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
+  const { data: projects = [], isLoading: projectsLoading } = useQuery<Project[]>({
+    queryKey: ["/api/projects"],
+    enabled: !!user,
+  });
 
-  const fetchDashboardData = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setLoading(false);
-        return;
-      }
+  const { data: tasks = [], isLoading: tasksLoading } = useQuery<Task[]>({
+    queryKey: ["/api/tasks"],
+    enabled: !!user,
+  });
 
-      // Fetch role and member projects in parallel
-      const [roleResult, memberResult] = await Promise.all([
-        supabase.from("user_roles").select("role").eq("user_id", user.id).maybeSingle(),
-        supabase.from("project_members").select("project_id").eq("user_id", user.id)
-      ]);
+  const loading = projectsLoading || tasksLoading;
 
-      const userRole = roleResult.data?.role;
-      const isAdminOrManager = userRole === "admin" || userRole === "manager";
-      const memberProjectIds = memberResult.data?.map(p => p.project_id) || [];
+  // Filter projects by status
+  const activeProjects = projects.filter(p => p.status === "active").slice(0, 5);
 
-      // If staff with no projects, show empty state immediately
-      if (!isAdminOrManager && memberProjectIds.length === 0) {
-        setLoading(false);
-        return;
-      }
+  // Split tasks into pending and overdue
+  const now = new Date();
+  const pendingTasks: Task[] = [];
+  const overdueTasks: Task[] = [];
 
-      // Build queries based on role
-      let projectsQuery = supabase.from("projects").select("id, name, brand_color, status").eq("status", "active").limit(5);
-      let tasksQuery = supabase.from("tasks").select("id, title, due_date, status, project_id, profiles:profiles!tasks_assignee_id_fkey(full_name)").neq("status", "Done").limit(10);
-      
-      if (!isAdminOrManager) {
-        projectsQuery = projectsQuery.in("id", memberProjectIds);
-        tasksQuery = tasksQuery.in("project_id", memberProjectIds);
-      }
-
-      // Fetch projects and tasks in parallel
-      const [projectsResult, tasksResult] = await Promise.all([
-        projectsQuery,
-        tasksQuery
-      ]);
-
-      setProjects(projectsResult.data || []);
-      
-      const allTasks = tasksResult.data || [];
-      const now = new Date();
-      
-      // Split tasks into pending and overdue
-      const pending: Task[] = [];
-      const overdue: Task[] = [];
-      
-      allTasks.forEach(task => {
-        if (task.due_date && new Date(task.due_date) < now) {
-          overdue.push(task);
-        } else {
-          pending.push(task);
-        }
-      });
-
-      setPendingTasks(pending.slice(0, 5));
-      setOverdueTasks(overdue.slice(0, 5));
-    } catch (error) {
-      console.error("Error fetching dashboard:", error);
-    } finally {
-      setLoading(false);
+  tasks.filter(t => t.status !== "Done").forEach(task => {
+    if (task.dueDate && new Date(task.dueDate) < now) {
+      overdueTasks.push(task);
+    } else {
+      pendingTasks.push(task);
     }
-  };
+  });
 
-  // Skeleton loading state - shows instantly
   if (loading) {
     return (
       <div className="space-y-4 sm:space-y-6 p-1 sm:p-0">
@@ -138,25 +91,26 @@ const Dashboard = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
         <Card className="card-hover">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6 sm:pb-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6 sm:pb-2 gap-2">
             <CardTitle className="text-sm font-medium">Active Projects</CardTitle>
             <FolderKanban className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent className="p-4 sm:p-6 pt-0">
-            <div className="text-2xl font-bold">{projects.length}</div>
+            <div className="text-2xl font-bold">{activeProjects.length}</div>
             <p className="text-xs text-muted-foreground mb-3">Currently in progress</p>
             <div className="space-y-1.5">
-              {projects.map((project) => (
+              {activeProjects.map((project) => (
                 <div
                   key={project.id}
                   onClick={() => navigate(`/projects/${project.id}`)}
                   className="flex items-center gap-2 p-1.5 rounded-md bg-muted/50 hover:bg-muted cursor-pointer text-xs"
+                  data-testid={`card-project-${project.id}`}
                 >
-                  <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: project.brand_color }} />
+                  <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: project.brandColor }} />
                   <span className="truncate font-medium">{project.name}</span>
                 </div>
               ))}
-              {projects.length === 0 && (
+              {activeProjects.length === 0 && (
                 <p className="text-xs text-muted-foreground">No active projects</p>
               )}
             </div>
@@ -164,7 +118,7 @@ const Dashboard = () => {
         </Card>
 
         <Card className="card-hover">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6 sm:pb-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6 sm:pb-2 gap-2">
             <CardTitle className="text-sm font-medium">Pending Tasks</CardTitle>
             <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -172,17 +126,17 @@ const Dashboard = () => {
             <div className="text-2xl font-bold">{pendingTasks.length}</div>
             <p className="text-xs text-muted-foreground mb-3">Awaiting completion</p>
             <div className="space-y-1.5">
-              {pendingTasks.map((task) => (
-                <div key={task.id} className="p-1.5 rounded-md bg-muted/50 text-xs">
+              {pendingTasks.slice(0, 5).map((task) => (
+                <div key={task.id} className="p-1.5 rounded-md bg-muted/50 text-xs" data-testid={`card-task-${task.id}`}>
                   <div className="font-medium truncate">{task.title}</div>
                   <div className="flex items-center gap-2 mt-0.5 text-muted-foreground">
-                    {task.due_date && (
+                    {task.dueDate && (
                       <span className="flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
-                        {format(new Date(task.due_date), "MMM d")}
+                        {format(new Date(task.dueDate), "MMM d")}
                       </span>
                     )}
-                    {task.profiles && <span className="truncate">• {task.profiles.full_name}</span>}
+                    {task.assigneeName && <span className="truncate">- {task.assigneeName}</span>}
                   </div>
                 </div>
               ))}
@@ -194,7 +148,7 @@ const Dashboard = () => {
         </Card>
 
         <Card className="card-hover border-destructive/50">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6 sm:pb-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6 sm:pb-2 gap-2">
             <CardTitle className="text-sm font-medium">Overdue Tasks</CardTitle>
             <AlertCircle className="h-4 w-4 text-destructive" />
           </CardHeader>
@@ -202,17 +156,17 @@ const Dashboard = () => {
             <div className="text-2xl font-bold text-destructive">{overdueTasks.length}</div>
             <p className="text-xs text-muted-foreground mb-3">Need attention</p>
             <div className="space-y-1.5">
-              {overdueTasks.map((task) => (
-                <div key={task.id} className="p-1.5 rounded-md bg-destructive/10 border border-destructive/20 text-xs">
+              {overdueTasks.slice(0, 5).map((task) => (
+                <div key={task.id} className="p-1.5 rounded-md bg-destructive/10 border border-destructive/20 text-xs" data-testid={`card-task-overdue-${task.id}`}>
                   <div className="font-medium truncate text-destructive">{task.title}</div>
                   <div className="flex items-center gap-2 mt-0.5 text-muted-foreground">
-                    {task.due_date && (
+                    {task.dueDate && (
                       <span className="flex items-center gap-1 text-destructive">
                         <Calendar className="h-3 w-3" />
-                        {format(new Date(task.due_date), "MMM d")}
+                        {format(new Date(task.dueDate), "MMM d")}
                       </span>
                     )}
-                    {task.profiles && <span className="truncate">• {task.profiles.full_name}</span>}
+                    {task.assigneeName && <span className="truncate">- {task.assigneeName}</span>}
                   </div>
                 </div>
               ))}
