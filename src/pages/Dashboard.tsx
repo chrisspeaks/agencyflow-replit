@@ -127,7 +127,12 @@ const Dashboard = () => {
             <p className="text-xs text-muted-foreground mb-3">Awaiting completion</p>
             <div className="space-y-1.5">
               {pendingTasks.slice(0, 5).map((task) => (
-                <div key={task.id} className="p-1.5 rounded-md bg-muted/50 text-xs" data-testid={`card-task-${task.id}`}>
+                <div 
+                  key={task.id} 
+                  className="p-1.5 rounded-md bg-muted/50 hover:bg-muted cursor-pointer text-xs" 
+                  onClick={() => navigate(`/projects/${task.projectId}?taskId=${task.id}`)}
+                  data-testid={`card-task-${task.id}`}
+                >
                   <div className="font-medium truncate">{task.title}</div>
                   <div className="flex items-center gap-2 mt-0.5 text-muted-foreground">
                     {task.dueDate && (
@@ -157,7 +162,12 @@ const Dashboard = () => {
             <p className="text-xs text-muted-foreground mb-3">Need attention</p>
             <div className="space-y-1.5">
               {overdueTasks.slice(0, 5).map((task) => (
-                <div key={task.id} className="p-1.5 rounded-md bg-destructive/10 border border-destructive/20 text-xs" data-testid={`card-task-overdue-${task.id}`}>
+                <div 
+                  key={task.id} 
+                  className="p-1.5 rounded-md bg-destructive/10 border border-destructive/20 hover:bg-destructive/20 cursor-pointer text-xs" 
+                  onClick={() => navigate(`/projects/${task.projectId}?taskId=${task.id}`)}
+                  data-testid={`card-task-overdue-${task.id}`}
+                >
                   <div className="font-medium truncate text-destructive">{task.title}</div>
                   <div className="flex items-center gap-2 mt-0.5 text-muted-foreground">
                     {task.dueDate && (

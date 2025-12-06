@@ -161,10 +161,29 @@ router.get("/api/tasks", requireAuth, async (req, res) => {
 
 router.post("/api/tasks", requireAuth, async (req, res) => {
   try {
-    const task = await storage.createTask({
-      ...req.body,
+    const body = req.body;
+    const projectId = body.project_id || body.projectId;
+    const title = body.title;
+    
+    if (!projectId) {
+      return res.status(400).json({ error: "Project ID is required" });
+    }
+    if (!title) {
+      return res.status(400).json({ error: "Title is required" });
+    }
+    
+    const taskData = {
+      projectId,
+      title,
+      description: body.description || null,
+      priority: body.priority || "P2-Medium",
+      status: body.status || "Todo",
+      dueDate: body.due_date || body.dueDate || null,
+      isBlocked: body.is_blocked !== undefined ? body.is_blocked : (body.isBlocked || false),
+      comments: body.comments || null,
       createdBy: req.user!.id,
-    });
+    };
+    const task = await storage.createTask(taskData);
     res.json(task);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -185,7 +204,21 @@ router.get("/api/tasks/:id", requireAuth, async (req, res) => {
 
 router.patch("/api/tasks/:id", requireAuth, async (req, res) => {
   try {
-    const updated = await storage.updateTask(req.params.id, req.body);
+    const body = req.body;
+    const updateData: any = {};
+    if (body.title !== undefined) updateData.title = body.title;
+    if (body.description !== undefined) updateData.description = body.description;
+    if (body.priority !== undefined) updateData.priority = body.priority;
+    if (body.status !== undefined) updateData.status = body.status;
+    if (body.comments !== undefined) updateData.comments = body.comments;
+    if (body.due_date !== undefined || body.dueDate !== undefined) {
+      updateData.dueDate = body.due_date || body.dueDate;
+    }
+    if (body.is_blocked !== undefined || body.isBlocked !== undefined) {
+      updateData.isBlocked = body.is_blocked !== undefined ? body.is_blocked : body.isBlocked;
+    }
+    
+    const updated = await storage.updateTask(req.params.id, updateData);
     if (!updated) {
       return res.status(404).json({ error: "Task not found" });
     }
@@ -249,6 +282,24 @@ router.post("/api/notifications", requireAuth, async (req, res) => {
 router.patch("/api/notifications/:id/read", requireAuth, async (req, res) => {
   try {
     await storage.markNotificationRead(req.params.id, req.user!.id);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete("/api/notifications/:id", requireAuth, async (req, res) => {
+  try {
+    await storage.deleteNotification(req.params.id, req.user!.id);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete("/api/notifications", requireAuth, async (req, res) => {
+  try {
+    await storage.clearAllNotifications(req.user!.id);
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

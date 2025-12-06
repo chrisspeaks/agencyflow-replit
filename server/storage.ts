@@ -59,6 +59,7 @@ export interface IStorage {
   createNotification(notification: InsertNotification): Promise<void>;
   markNotificationRead(id: string, userId: string): Promise<void>;
   deleteNotification(id: string, userId: string): Promise<void>;
+  clearAllNotifications(userId: string): Promise<void>;
 
   // Task Comments
   getTaskComments(taskId: string): Promise<any[]>;
@@ -241,6 +242,11 @@ export class PostgresStorage implements IStorage {
   async deleteNotification(id: string, userId: string) {
     await db.delete(schema.notifications)
       .where(and(eq(schema.notifications.id, id), eq(schema.notifications.userId, userId)));
+  }
+
+  async clearAllNotifications(userId: string) {
+    await db.delete(schema.notifications)
+      .where(eq(schema.notifications.userId, userId));
   }
 
   async getTaskComments(taskId: string) {

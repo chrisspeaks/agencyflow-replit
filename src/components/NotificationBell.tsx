@@ -50,15 +50,23 @@ export function NotificationBell() {
     await Promise.all(unreadNotifications.map(n => markAsReadMutation.mutateAsync(n.id)));
   };
 
-  const deleteNotification = async (id: string) => {
-    // Note: Would need a delete endpoint to be added to server/routes.ts
-    queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
-  };
+  const deleteNotificationMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest(`/api/notifications/${id}`, { method: "DELETE" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    },
+  });
 
-  const clearAll = async () => {
-    // Note: Would need a clear all endpoint to be added to server/routes.ts
-    queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
-  };
+  const clearAllMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest(`/api/notifications`, { method: "DELETE" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    },
+  });
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -100,7 +108,7 @@ export function NotificationBell() {
                 variant="ghost" 
                 size="sm" 
                 className="h-7 text-xs text-destructive hover:text-destructive"
-                onClick={clearAll}
+                onClick={() => clearAllMutation.mutate()}
                 data-testid="button-clear-all"
               >
                 Clear all
@@ -160,7 +168,7 @@ export function NotificationBell() {
                         variant="ghost"
                         size="icon"
                         className="h-6 w-6 text-destructive hover:text-destructive"
-                        onClick={() => deleteNotification(notification.id)}
+                        onClick={() => deleteNotificationMutation.mutate(notification.id)}
                         data-testid={`button-delete-${notification.id}`}
                       >
                         <Trash2 className="h-3 w-3" />
