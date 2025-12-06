@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +11,9 @@ import { Layers, Lock } from "lucide-react";
 
 const ChangePassword = () => {
   const navigate = useNavigate();
+  const { token, refreshUser } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
@@ -31,24 +33,25 @@ const ChangePassword = () => {
     setLoading(true);
 
     try {
-      // Update password
-      const { error: passwordError } = await supabase.auth.updateUser({
-        password: password,
+      const response = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword: password,
+        }),
       });
 
-      if (passwordError) throw passwordError;
+      const data = await response.json();
 
-      // Clear force_password_change flag
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { error: profileError } = await supabase
-          .from("profiles")
-          .update({ force_password_change: false })
-          .eq("id", user.id);
-
-        if (profileError) throw profileError;
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to change password");
       }
 
+      await refreshUser();
       toast.success("Password changed successfully!");
       navigate("/dashboard");
     } catch (error: any) {
@@ -61,7 +64,6 @@ const ChangePassword = () => {
 
   return (
     <div className="min-h-screen bg-[hsl(220,20%,8%)] text-white overflow-hidden relative flex items-center justify-center p-4">
-      {/* Background effects matching landing page */}
       <div className="absolute inset-0 bg-[linear-gradient(hsl(220,20%,12%)_1px,transparent_1px),linear-gradient(90deg,hsl(220,20%,12%)_1px,transparent_1px)] bg-[size:60px_60px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,black_70%,transparent_110%)]" />
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-accent/20 rounded-full blur-[120px] animate-pulse" />
       <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-primary/10 rounded-full blur-[100px] animate-pulse" style={{ animationDelay: "1s" }} />
@@ -87,6 +89,19 @@ const ChangePassword = () => {
           </p>
           <form onSubmit={handleChangePassword} className="space-y-4">
             <div className="space-y-2">
+              <Label htmlFor="current-password" className="text-white/80">Current Password</Label>
+              <Input
+                id="current-password"
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                required
+                className="bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-accent"
+                placeholder="Enter current password"
+                data-testid="input-current-password"
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="new-password" className="text-white/80">New Password</Label>
               <Input
                 id="new-password"
@@ -97,6 +112,7 @@ const ChangePassword = () => {
                 minLength={6}
                 className="bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-accent"
                 placeholder="Enter new password"
+                data-testid="input-new-password"
               />
             </div>
             <div className="space-y-2">
@@ -110,9 +126,15 @@ const ChangePassword = () => {
                 minLength={6}
                 className="bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-accent"
                 placeholder="Confirm new password"
+                data-testid="input-confirm-password"
               />
             </div>
-            <Button type="submit" className="w-full bg-accent hover:bg-accent/90 text-white" disabled={loading}>
+            <Button 
+              type="submit" 
+              className="w-full bg-accent hover:bg-accent/90 text-white" 
+              disabled={loading}
+              data-testid="button-change-password"
+            >
               {loading ? "Changing Password..." : "Change Password"}
             </Button>
           </form>

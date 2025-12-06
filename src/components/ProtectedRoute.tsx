@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { User, Session } from "@supabase/supabase-js";
+import { useAuth } from "@/lib/auth";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -10,67 +9,29 @@ interface ProtectedRouteProps {
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { user, isLoading, logout } = useAuth();
 
   useEffect(() => {
-    const checkUserAccess = async (userId: string) => {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("is_active, force_password_change")
-        .eq("id", userId)
-        .single();
+    if (isLoading) return;
 
-      if (!profile?.is_active) {
-        await supabase.auth.signOut();
-        navigate("/auth?inactive=true");
-        return false;
-      }
+    if (!user) {
+      navigate("/auth");
+      return;
+    }
 
-      // Check if password change is required (skip if already on change-password page)
-      if (profile?.force_password_change && location.pathname !== "/change-password") {
-        navigate("/change-password");
-        return false;
-      }
+    if (!user.profile?.isActive) {
+      logout();
+      navigate("/auth?inactive=true");
+      return;
+    }
 
-      return true;
-    };
+    if (user.profile?.forcePasswordChange && location.pathname !== "/change-password") {
+      navigate("/change-password");
+      return;
+    }
+  }, [user, isLoading, navigate, location.pathname, logout]);
 
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (!session) {
-          navigate("/auth");
-        } else {
-          // Use setTimeout to avoid deadlock
-          setTimeout(async () => {
-            await checkUserAccess(session.user.id);
-            setLoading(false);
-          }, 0);
-        }
-      }
-    );
-
-    // THEN check for existing session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (!session) {
-        navigate("/auth");
-        setLoading(false);
-      } else {
-        await checkUserAccess(session.user.id);
-        setLoading(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [navigate, location.pathname]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">

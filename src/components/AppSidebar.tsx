@@ -1,10 +1,9 @@
 import { LayoutDashboard, FolderKanban, Users, LogOut, Shield, User } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import { APP_NAME } from "@/config/appConfig";
-import { useState, useEffect } from "react";
 
 import {
   Sidebar,
@@ -35,36 +34,17 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const currentPath = location.pathname;
   const isCollapsed = state === "collapsed";
-  const [userRole, setUserRole] = useState<string | null>(null);
 
-  useEffect(() => {
-    checkUserRole();
-  }, []);
-
-  const checkUserRole = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .single();
-
-    setUserRole(data?.role || null);
-  };
+  const userRole = user?.profile?.role || user?.roles?.[0] || null;
 
   const isActive = (path: string) => currentPath === path;
 
   const handleSignOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      toast.error("Error signing out");
-    } else {
-      navigate("/auth");
-    }
+    await logout();
+    navigate("/auth");
   };
 
   return (
@@ -90,6 +70,7 @@ export function AppSidebar() {
                         end
                         className="hover:bg-sidebar-accent transition-smooth"
                         activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
+                        data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
                       >
                         <item.icon className="h-4 w-4" />
                         {!isCollapsed && <span>{item.title}</span>}
@@ -113,6 +94,7 @@ export function AppSidebar() {
                       end
                       className="hover:bg-sidebar-accent transition-smooth"
                       activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
+                      data-testid={`nav-${item.title.toLowerCase()}`}
                     >
                       <item.icon className="h-4 w-4" />
                       {!isCollapsed && <span>{item.title}</span>}
@@ -128,7 +110,7 @@ export function AppSidebar() {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton onClick={handleSignOut} className="hover:bg-sidebar-accent transition-smooth">
+            <SidebarMenuButton onClick={handleSignOut} className="hover:bg-sidebar-accent transition-smooth" data-testid="button-signout">
               <LogOut className="h-4 w-4" />
               {!isCollapsed && <span>Sign Out</span>}
             </SidebarMenuButton>

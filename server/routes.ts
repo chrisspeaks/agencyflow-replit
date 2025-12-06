@@ -1,20 +1,10 @@
 import { Router } from "express";
 import { storage } from "./storage";
+import { requireAuth, requireRole } from "./auth";
 
 const router = Router();
 
-// Auth mock endpoints (simplified - in production use proper auth)
-router.get("/api/auth/user", (req, res) => {
-  // Mock auth - in real app, verify JWT token
-  const userId = req.headers["x-user-id"] as string;
-  if (!userId) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-  res.json({ id: userId });
-});
-
-// Profiles
-router.get("/api/profiles", async (req, res) => {
+router.get("/api/profiles", requireAuth, async (req, res) => {
   try {
     const profiles = await storage.getAllProfiles();
     res.json(profiles);
@@ -23,7 +13,7 @@ router.get("/api/profiles", async (req, res) => {
   }
 });
 
-router.get("/api/profiles/:id", async (req, res) => {
+router.get("/api/profiles/:id", requireAuth, async (req, res) => {
   try {
     const profile = await storage.getProfile(req.params.id);
     if (!profile) {
@@ -35,8 +25,11 @@ router.get("/api/profiles/:id", async (req, res) => {
   }
 });
 
-router.patch("/api/profiles/:id", async (req, res) => {
+router.patch("/api/profiles/:id", requireAuth, async (req, res) => {
   try {
+    if (req.user!.id !== req.params.id && !req.user!.roles.includes("admin")) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
     const updated = await storage.updateProfile(req.params.id, req.body);
     if (!updated) {
       return res.status(404).json({ error: "Profile not found" });
@@ -47,19 +40,15 @@ router.patch("/api/profiles/:id", async (req, res) => {
   }
 });
 
-// Projects
-router.get("/api/projects", async (req, res) => {
+router.get("/api/projects", requireAuth, async (req, res) => {
   try {
-    const userId = req.headers["x-user-id"] as string;
-    const roles = userId ? await storage.getUserRoles(userId) : [];
+    const roles = await storage.getUserRoles(req.user!.id);
     
     let projects;
-    if (roles.includes("admin") || roles.includes("manager")) {
+    if (roles.includes("admin") || roles.includes("manager") || req.user!.profile?.role === "admin" || req.user!.profile?.role === "manager") {
       projects = await storage.getAllProjects();
-    } else if (userId) {
-      projects = await storage.getProjectsByUserId(userId);
     } else {
-      projects = [];
+      projects = await storage.getProjectsByUserId(req.user!.id);
     }
     
     res.json(projects);
@@ -68,7 +57,7 @@ router.get("/api/projects", async (req, res) => {
   }
 });
 
-router.post("/api/projects", async (req, res) => {
+router.post("/api/projects", requireAuth, requireRole("admin", "manager"), async (req, res) => {
   try {
     const project = await storage.createProject(req.body);
     res.json(project);
@@ -77,7 +66,7 @@ router.post("/api/projects", async (req, res) => {
   }
 });
 
-router.get("/api/projects/:id", async (req, res) => {
+router.get("/api/projects/:id", requireAuth, async (req, res) => {
   try {
     const project = await storage.getProject(req.params.id);
     if (!project) {
@@ -89,7 +78,7 @@ router.get("/api/projects/:id", async (req, res) => {
   }
 });
 
-router.patch("/api/projects/:id", async (req, res) => {
+router.patch("/api/projects/:id", requireAuth, requireRole("admin", "manager"), async (req, res) => {
   try {
     const updated = await storage.updateProject(req.params.id, req.body);
     if (!updated) {
@@ -101,8 +90,7 @@ router.patch("/api/projects/:id", async (req, res) => {
   }
 });
 
-// Project Members
-router.get("/api/projects/:projectId/members", async (req, res) => {
+router.get("/api/projects/:projectId/members", requireAuth, async (req, res) => {
   try {
     const memberIds = await storage.getProjectMembers(req.params.projectId);
     res.json(memberIds);
@@ -111,7 +99,7 @@ router.get("/api/projects/:projectId/members", async (req, res) => {
   }
 });
 
-router.post("/api/projects/:projectId/members", async (req, res) => {
+router.post("/api/projects/:projectId/members", requireAuth, requireRole("admin", "manager"), async (req, res) => {
   try {
     await storage.addProjectMember({
       projectId: req.params.projectId,
@@ -123,7 +111,7 @@ router.post("/api/projects/:projectId/members", async (req, res) => {
   }
 });
 
-router.delete("/api/projects/:projectId/members/:userId", async (req, res) => {
+router.delete("/api/projects/:projectId/members/:userId", requireAuth, requireRole("admin", "manager"), async (req, res) => {
   try {
     await storage.removeProjectMember(req.params.projectId, req.params.userId);
     res.json({ success: true });
@@ -132,8 +120,7 @@ router.delete("/api/projects/:projectId/members/:userId", async (req, res) => {
   }
 });
 
-// Tasks
-router.get("/api/tasks", async (req, res) => {
+router.get("/api/tasks", requireAuth, async (req, res) => {
   try {
     const { projectId, assigneeId } = req.query;
     let tasks;
@@ -143,7 +130,7 @@ router.get("/api/tasks", async (req, res) => {
     } else if (assigneeId) {
       tasks = await storage.getTasksByAssignee(assigneeId as string);
     } else {
-      tasks = [];
+      tasks = await storage.getTasksByAssignee(req.user!.id);
     }
     
     res.json(tasks);
@@ -152,16 +139,19 @@ router.get("/api/tasks", async (req, res) => {
   }
 });
 
-router.post("/api/tasks", async (req, res) => {
+router.post("/api/tasks", requireAuth, async (req, res) => {
   try {
-    const task = await storage.createTask(req.body);
+    const task = await storage.createTask({
+      ...req.body,
+      createdBy: req.user!.id,
+    });
     res.json(task);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
 
-router.get("/api/tasks/:id", async (req, res) => {
+router.get("/api/tasks/:id", requireAuth, async (req, res) => {
   try {
     const task = await storage.getTask(req.params.id);
     if (!task) {
@@ -173,7 +163,7 @@ router.get("/api/tasks/:id", async (req, res) => {
   }
 });
 
-router.patch("/api/tasks/:id", async (req, res) => {
+router.patch("/api/tasks/:id", requireAuth, async (req, res) => {
   try {
     const updated = await storage.updateTask(req.params.id, req.body);
     if (!updated) {
@@ -185,21 +175,16 @@ router.patch("/api/tasks/:id", async (req, res) => {
   }
 });
 
-// Notifications
-router.get("/api/notifications", async (req, res) => {
+router.get("/api/notifications", requireAuth, async (req, res) => {
   try {
-    const userId = req.headers["x-user-id"] as string;
-    if (!userId) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-    const notifications = await storage.getUserNotifications(userId);
+    const notifications = await storage.getUserNotifications(req.user!.id);
     res.json(notifications);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
 
-router.post("/api/notifications", async (req, res) => {
+router.post("/api/notifications", requireAuth, async (req, res) => {
   try {
     await storage.createNotification(req.body);
     res.json({ success: true });
@@ -208,14 +193,41 @@ router.post("/api/notifications", async (req, res) => {
   }
 });
 
-router.patch("/api/notifications/:id/read", async (req, res) => {
+router.patch("/api/notifications/:id/read", requireAuth, async (req, res) => {
   try {
-    const userId = req.headers["x-user-id"] as string;
-    if (!userId) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-    await storage.markNotificationRead(req.params.id, userId);
+    await storage.markNotificationRead(req.params.id, req.user!.id);
     res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/api/tasks/:taskId/comments", requireAuth, async (req, res) => {
+  try {
+    const comments = await storage.getTaskComments(req.params.taskId);
+    res.json(comments);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/api/tasks/:taskId/comments", requireAuth, async (req, res) => {
+  try {
+    await storage.createTaskComment({
+      taskId: req.params.taskId,
+      userId: req.user!.id,
+      content: req.body.content,
+    });
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/api/tasks/:taskId/logs", requireAuth, async (req, res) => {
+  try {
+    const logs = await storage.getTaskLogs(req.params.taskId);
+    res.json(logs);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

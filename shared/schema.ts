@@ -8,8 +8,24 @@ export const projectStatusEnum = pgEnum("project_status", ["active", "archived",
 export const taskPriorityEnum = pgEnum("task_priority", ["P1-High", "P2-Medium", "P3-Low"]);
 export const taskStatusEnum = pgEnum("task_status", ["Todo", "In Progress", "Internal Review", "Pending Client Review", "Done"]);
 
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const sessions = pgTable("sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const profiles = pgTable("profiles", {
-  id: uuid("id").primaryKey(),
+  id: uuid("id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
   fullName: text("full_name").notNull(),
   role: userRoleEnum("role").notNull().default("staff"),
   avatarUrl: text("avatar_url"),
@@ -97,8 +113,22 @@ export const taskLogs = pgTable("task_logs", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const insertProfileSchema = createInsertSchema(profiles).omit({ 
+export const insertUserSchema = createInsertSchema(users).omit({ 
   id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type User = typeof users.$inferSelect;
+
+export const insertSessionSchema = createInsertSchema(sessions).omit({ 
+  id: true, 
+  createdAt: true 
+});
+export type InsertSession = z.infer<typeof insertSessionSchema>;
+export type Session = typeof sessions.$inferSelect;
+
+export const insertProfileSchema = createInsertSchema(profiles).omit({ 
   createdAt: true, 
   updatedAt: true 
 });
