@@ -28,7 +28,19 @@ export default function MyWorkbench() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
   const { data: tasks = [], isLoading, refetch } = useQuery<Task[]>({
-    queryKey: ["/api/tasks", "assignee", user?.id],
+    queryKey: ["/api/tasks", { assigneeId: user?.id }],
+    queryFn: async () => {
+      const token = localStorage.getItem("auth_token");
+      const headers: HeadersInit = { "Content-Type": "application/json" };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+      const response = await fetch(`/api/tasks?assigneeId=${user?.id}`, { headers });
+      if (!response.ok) {
+        throw new Error(`${response.status}: ${response.statusText}`);
+      }
+      return response.json();
+    },
     enabled: !!user,
   });
 

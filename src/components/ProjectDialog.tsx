@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { apiRequest } from "@/lib/queryClient";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,14 +26,15 @@ export function ProjectDialog({ open, onOpenChange, onSuccess }: ProjectDialogPr
     setLoading(true);
 
     try {
-      const { error } = await supabase.from("projects").insert({
-        name,
-        description: description || null,
-        status: status as any,
-        brand_color: brandColor,
+      await apiRequest("/api/projects", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          description: description || null,
+          status,
+          brandColor,
+        }),
       });
-
-      if (error) throw error;
 
       toast.success("Project created successfully!");
       setName("");
