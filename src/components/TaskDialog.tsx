@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { apiRequest } from "@/lib/queryClient";
 import {
   Dialog,
   DialogContent,
@@ -65,18 +65,26 @@ export function TaskDialog({
     comments: "",
   });
 
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("auth_token");
+    return {
+      "Content-Type": "application/json",
+      Authorization: token ? `Bearer ${token}` : "",
+    };
+  };
+
   const fetchTeamMembers = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from("project_members")
-        .select("user_id, profiles(id, full_name, email)")
-        .eq("project_id", projectId);
-
-      if (error) throw error;
-
-      const members = data
-        .map((m: any) => m.profiles)
-        .filter(Boolean) as Profile[];
+      const response = await fetch(`/api/projects/${projectId}/members`, {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) throw new Error("Failed to fetch team members");
+      const data = await response.json();
+      const members = data.map((m: any) => ({
+        id: m.user_id,
+        full_name: m.full_name || m.email,
+        email: m.email,
+      }));
       setTeamMembers(members);
     } catch (error) {
       console.error("Error fetching team members:", error);
@@ -85,13 +93,11 @@ export function TaskDialog({
 
   const fetchProjectName = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from("projects")
-        .select("name")
-        .eq("id", projectId)
-        .single();
-
-      if (error) throw error;
+      const response = await fetch(`/api/projects/${projectId}`, {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) throw new Error("Failed to fetch project");
+      const data = await response.json();
       setProjectName(data.name);
     } catch (error) {
       console.error("Error fetching project name:", error);
@@ -100,13 +106,12 @@ export function TaskDialog({
 
   const fetchTaskAssignees = useCallback(async (taskId: string) => {
     try {
-      const { data, error } = await supabase
-        .from("task_assignees")
-        .select("user_id")
-        .eq("task_id", taskId);
-
-      if (error) throw error;
-      setFormData(prev => ({ ...prev, assignee_ids: data.map(a => a.user_id) }));
+      const response = await fetch(`/api/tasks/${taskId}/assignees`, {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) throw new Error("Failed to fetch assignees");
+      const data = await response.json();
+      setFormData(prev => ({ ...prev, assignee_ids: data.map((a: any) => a.user_id) }));
     } catch (error) {
       console.error("Error fetching task assignees:", error);
     }
@@ -153,87 +158,60 @@ export function TaskDialog({
         ...taskData,
         project_id: projectId,
         due_date: formData.due_date?.toISOString(),
-      } as any;
+      };
 
-      let result;
+      let resultData;
       if (task) {
-        result = await supabase
-          .from("tasks")
-          .update(finalTaskData)
-          .eq("id", task.id)
-          .select()
-          .single();
+        const response = await apiRequest(`/api/tasks/${task.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(finalTaskData),
+        });
+        resultData = await response.json();
       } else {
-        result = await supabase
-          .from("tasks")
-          .insert(finalTaskData)
-          .select()
-          .single();
+        const response = await apiRequest("/api/tasks", {
+          method: "POST",
+          body: JSON.stringify(finalTaskData),
+        });
+        resultData = await response.json();
       }
 
-      if (result.error) throw result.error;
+      const taskId = task ? task.id : resultData.id;
 
-      // Handle assignees
-      const taskId = task ? task.id : result.data.id;
-      
       if (task) {
-        const { data: previousAssignees } = await supabase
-          .from("task_assignees")
-          .select("user_id")
-          .eq("task_id", task.id);
-        
-        const previousIds = previousAssignees?.map(a => a.user_id) || [];
+        const assigneesRes = await fetch(`/api/tasks/${task.id}/assignees`, {
+          headers: getAuthHeaders(),
+        });
+        const previousAssignees = assigneesRes.ok ? await assigneesRes.json() : [];
+        const previousIds = previousAssignees.map((a: any) => a.user_id);
         const addedIds = assignee_ids.filter(id => !previousIds.includes(id));
-        const removedIds = previousIds.filter(id => !assignee_ids.includes(id));
+        const removedIds = previousIds.filter((id: string) => !assignee_ids.includes(id));
 
-        if (removedIds.length > 0) {
-          await supabase
-            .from("task_assignees")
-            .delete()
-            .eq("task_id", task.id)
-            .in("user_id", removedIds);
-          
-          // Send unassignment notifications
-          removedIds.forEach(userId => {
-            const member = teamMembers.find(m => m.id === userId);
-            if (member) {
-              // Create in-app notification
-              createNotificationForUser(
-                userId,
-                "Task Unassigned",
-                `You have been unassigned from task "${formData.title}" in project "${projectName}"`,
-                "task_assignment",
-                `/projects/${projectId}`
-              );
-
-              // Send email notification (non-blocking)
-              supabase.functions.invoke("send-assignment-notification", {
-                body: {
-                  taskId: task.id,
-                  taskTitle: formData.title,
-                  assigneeEmail: member.email,
-                  assigneeName: member.full_name,
-                  projectName,
-                  dueDate: formData.due_date?.toISOString(),
-                  priority: formData.priority,
-                  action: "unassigned",
-                },
-              }).catch(console.error);
-            }
+        for (const userId of removedIds) {
+          await apiRequest(`/api/tasks/${task.id}/assignees/${userId}`, {
+            method: "DELETE",
           });
+          
+          const member = teamMembers.find(m => m.id === userId);
+          if (member) {
+            createNotificationForUser(
+              userId,
+              "Task Unassigned",
+              `You have been unassigned from task "${formData.title}" in project "${projectName}"`,
+              "task_assignment",
+              `/projects/${projectId}`
+            );
+          }
         }
 
         if (addedIds.length > 0) {
-          const newAssignees = addedIds.map(userId => ({
-            task_id: task.id,
-            user_id: userId,
-          }));
-          await supabase.from("task_assignees").insert(newAssignees);
+          await apiRequest(`/api/tasks/${task.id}/assignees`, {
+            method: "POST",
+            body: JSON.stringify({ userIds: addedIds }),
+          });
 
-          addedIds.forEach(userId => {
+          for (const userId of addedIds) {
             const member = teamMembers.find(m => m.id === userId);
             if (member) {
-              // Create in-app notification
               createNotificationForUser(
                 userId,
                 "New Task Assigned",
@@ -241,34 +219,18 @@ export function TaskDialog({
                 "task_assignment",
                 `/projects/${projectId}`
               );
-
-              // Send email notification (non-blocking)
-              supabase.functions.invoke("send-assignment-notification", {
-                body: {
-                  taskId: task.id,
-                  taskTitle: formData.title,
-                  assigneeEmail: member.email,
-                  assigneeName: member.full_name,
-                  projectName,
-                  dueDate: formData.due_date?.toISOString(),
-                  priority: formData.priority,
-                  action: "assigned",
-                },
-              }).catch(console.error);
             }
-          });
+          }
         }
       } else if (assignee_ids.length > 0) {
-        const newAssignees = assignee_ids.map(userId => ({
-          task_id: taskId,
-          user_id: userId,
-        }));
-        await supabase.from("task_assignees").insert(newAssignees);
+        await apiRequest(`/api/tasks/${taskId}/assignees`, {
+          method: "POST",
+          body: JSON.stringify({ userIds: assignee_ids }),
+        });
 
-        assignee_ids.forEach(userId => {
+        for (const userId of assignee_ids) {
           const member = teamMembers.find(m => m.id === userId);
           if (member) {
-            // Create in-app notification
             createNotificationForUser(
               userId,
               "New Task Assigned",
@@ -276,22 +238,8 @@ export function TaskDialog({
               "task_assignment",
               `/projects/${projectId}`
             );
-
-            // Send email notification (non-blocking)
-            supabase.functions.invoke("send-assignment-notification", {
-              body: {
-                taskId,
-                taskTitle: formData.title,
-                assigneeEmail: member.email,
-                assigneeName: member.full_name,
-                projectName,
-                dueDate: formData.due_date?.toISOString(),
-                priority: formData.priority,
-                action: "assigned",
-              },
-            }).catch(console.error);
           }
-        });
+        }
       }
 
       toast({
@@ -333,6 +281,7 @@ export function TaskDialog({
               placeholder="Enter task title"
               required
               className="h-9 sm:h-10"
+              data-testid="input-task-title"
             />
           </div>
 
@@ -347,6 +296,7 @@ export function TaskDialog({
               placeholder="Enter task description"
               rows={3}
               className="text-sm"
+              data-testid="input-task-description"
             />
           </div>
 
@@ -361,6 +311,7 @@ export function TaskDialog({
               placeholder="Add any additional comments or notes"
               rows={2}
               className="text-sm"
+              data-testid="input-task-comments"
             />
           </div>
 
@@ -373,7 +324,7 @@ export function TaskDialog({
                   setFormData({ ...formData, status: value })
                 }
               >
-                <SelectTrigger className="h-9 sm:h-10">
+                <SelectTrigger className="h-9 sm:h-10" data-testid="select-task-status">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -394,7 +345,7 @@ export function TaskDialog({
                   setFormData({ ...formData, priority: value })
                 }
               >
-                <SelectTrigger className="h-9 sm:h-10">
+                <SelectTrigger className="h-9 sm:h-10" data-testid="select-task-priority">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -426,6 +377,7 @@ export function TaskDialog({
                           : formData.assignee_ids.filter(id => id !== member.id);
                         setFormData({ ...formData, assignee_ids: newIds });
                       }}
+                      data-testid={`checkbox-assignee-${member.id}`}
                     />
                     <span className="text-xs sm:text-sm">{member.full_name}</span>
                   </label>
@@ -441,6 +393,7 @@ export function TaskDialog({
                 <Button
                   variant="outline"
                   className="w-full justify-start text-left font-normal h-9 sm:h-10 text-sm"
+                  data-testid="button-task-due-date"
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
                   {formData.due_date ? (
@@ -470,6 +423,7 @@ export function TaskDialog({
               onCheckedChange={(checked) =>
                 setFormData({ ...formData, is_blocked: checked })
               }
+              data-testid="switch-task-blocked"
             />
             <Label htmlFor="blocked" className="text-sm">Task is blocked</Label>
           </div>
@@ -481,10 +435,11 @@ export function TaskDialog({
               onClick={() => onOpenChange(false)}
               disabled={loading}
               className="w-full sm:w-auto h-9 sm:h-10"
+              data-testid="button-task-cancel"
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={loading} className="w-full sm:w-auto h-9 sm:h-10">
+            <Button type="submit" disabled={loading} className="w-full sm:w-auto h-9 sm:h-10" data-testid="button-task-submit">
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {task ? "Update" : "Create"} Task
             </Button>

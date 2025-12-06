@@ -4,6 +4,16 @@ import { requireAuth, requireRole } from "./auth";
 
 const router = Router();
 
+router.get("/api/user/role", requireAuth, async (req, res) => {
+  try {
+    const roles = await storage.getUserRoles(req.user!.id);
+    const role = roles.includes("admin") ? "admin" : roles.includes("manager") ? "manager" : roles[0] || null;
+    res.json({ role, roles });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get("/api/profiles", requireAuth, async (req, res) => {
   try {
     const profiles = await storage.getAllProfiles();
@@ -93,7 +103,17 @@ router.patch("/api/projects/:id", requireAuth, requireRole("admin", "manager"), 
 router.get("/api/projects/:projectId/members", requireAuth, async (req, res) => {
   try {
     const memberIds = await storage.getProjectMembers(req.params.projectId);
-    res.json(memberIds);
+    const profiles = await Promise.all(
+      memberIds.map(async (userId) => {
+        const profile = await storage.getProfile(userId);
+        return {
+          user_id: userId,
+          full_name: profile?.fullName || profile?.email || "Unknown",
+          email: profile?.email || "",
+        };
+      })
+    );
+    res.json(profiles);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -170,6 +190,39 @@ router.patch("/api/tasks/:id", requireAuth, async (req, res) => {
       return res.status(404).json({ error: "Task not found" });
     }
     res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/api/tasks/:taskId/assignees", requireAuth, async (req, res) => {
+  try {
+    const assignees = await storage.getTaskAssignees(req.params.taskId);
+    res.json(assignees.map(userId => ({ user_id: userId })));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/api/tasks/:taskId/assignees", requireAuth, async (req, res) => {
+  try {
+    const { userIds } = req.body;
+    for (const userId of userIds) {
+      await storage.addTaskAssignee({
+        taskId: req.params.taskId,
+        userId,
+      });
+    }
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete("/api/tasks/:taskId/assignees/:userId", requireAuth, async (req, res) => {
+  try {
+    await storage.removeTaskAssignee(req.params.taskId, req.params.userId);
+    res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

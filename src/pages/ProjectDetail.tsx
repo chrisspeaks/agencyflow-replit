@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -39,18 +39,28 @@ export default function ProjectDetail() {
 
   const fetchData = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const token = localStorage.getItem("auth_token");
+      if (!token) return;
 
-      // Fetch project and user role in parallel
-      const [projectResult, roleResult] = await Promise.all([
-        supabase.from("projects").select("*").eq("id", projectId).single(),
-        supabase.from("user_roles").select("role").eq("user_id", user.id).maybeSingle()
+      const headers = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      };
+
+      const [projectRes, roleRes] = await Promise.all([
+        fetch(`/api/projects/${projectId}`, { headers }),
+        fetch("/api/user/role", { headers }),
       ]);
 
-      if (projectResult.error) throw projectResult.error;
-      setProject(projectResult.data);
-      setUserRole(roleResult.data?.role || null);
+      if (!projectRes.ok) throw new Error("Failed to fetch project");
+      
+      const projectData = await projectRes.json();
+      setProject(projectData);
+
+      if (roleRes.ok) {
+        const roleData = await roleRes.json();
+        setUserRole(roleData.role || null);
+      }
     } catch (error: any) {
       console.error("Error fetching project:", error);
       toast({
@@ -73,12 +83,10 @@ export default function ProjectDetail() {
     setUpdatingStatus(true);
 
     try {
-      const { error } = await supabase
-        .from("projects")
-        .update({ status: newStatus as any })
-        .eq("id", project.id);
-
-      if (error) throw error;
+      await apiRequest(`/api/projects/${project.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: newStatus }),
+      });
 
       setProject({ ...project, status: newStatus });
       toast({
@@ -128,7 +136,6 @@ export default function ProjectDetail() {
     );
   }
 
-  // If closed and not admin/manager, show restricted message
   if (isClosed && !isAdminOrManager) {
     return (
       <div className="container mx-auto p-6 space-y-6">
