@@ -1,73 +1,47 @@
-# Welcome to your Lovable project
+# Task Management Application
 
-## Project info
+A comprehensive task management and project tracking application built with React, TypeScript, and Supabase.
 
-**URL**: https://lovable.dev/projects/b6def2b4-89c4-4d88-8bdc-b24ac22e9148
+## Features
 
-## How can I edit this code?
+- User authentication (login/signup)
+- Project management with team collaboration
+- Kanban-style task boards with drag-and-drop
+- Calendar view for task scheduling
+- Team member management
+- Notifications system
+- Admin dashboard
 
-There are several ways of editing your application.
+## Tech Stack
 
-**Use Lovable**
+- **Frontend**: React 18, TypeScript, TailwindCSS, Shadcn/UI
+- **State Management**: TanStack React Query
+- **Routing**: React Router DOM
+- **Backend**: Supabase (Auth, Database, Edge Functions)
+- **Styling**: TailwindCSS with custom design system
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/b6def2b4-89c4-4d88-8bdc-b24ac22e9148) and start prompting.
+## Development
 
-Changes made via Lovable will be committed automatically to this repo.
+The application runs on port 5000. Use the "Start application" workflow to launch the development server.
 
-**Use your preferred IDE**
+### Environment Variables
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+The following environment variables are required:
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+- `VITE_SUPABASE_URL` - Your Supabase project URL
+- `VITE_SUPABASE_ANON_KEY` - Your Supabase anonymous/public key
 
-Follow these steps:
+## Project Structure
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
 ```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/b6def2b4-89c4-4d88-8bdc-b24ac22e9148) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+src/
+├── components/     # Reusable UI components
+├── pages/          # Page components
+├── hooks/          # Custom React hooks
+├── integrations/   # Third-party integrations (Supabase)
+├── lib/            # Utility functions
+└── config/         # App configuration
+server/             # Express backend server
+shared/             # Shared types and schemas
+supabase/           # Supabase functions and migrations
+```
