@@ -166,10 +166,23 @@ export function TaskDialog({
 
     try {
       const { assignee_ids, ...taskData } = formData;
+      // Ensure due_date is properly formatted - handle both Date objects and string values
+      let dueDateValue: string | undefined = undefined;
+      if (formData.due_date) {
+        if (formData.due_date instanceof Date && !isNaN(formData.due_date.getTime())) {
+          dueDateValue = formData.due_date.toISOString();
+        } else if (typeof formData.due_date === 'string') {
+          // If it's already a string, try to parse and format it
+          const parsedDate = new Date(formData.due_date);
+          if (!isNaN(parsedDate.getTime())) {
+            dueDateValue = parsedDate.toISOString();
+          }
+        }
+      }
       const finalTaskData = {
         ...taskData,
         project_id: projectId,
-        due_date: formData.due_date?.toISOString(),
+        due_date: dueDateValue,
       };
 
       let resultData;
