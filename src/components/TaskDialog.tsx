@@ -76,6 +76,7 @@ export function TaskDialog({
     is_blocked: false,
     comments: "",
   });
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem("auth_token");
@@ -484,7 +485,7 @@ export function TaskDialog({
                 </Tooltip>
               )}
             </div>
-            <Popover>
+            <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
@@ -504,9 +505,10 @@ export function TaskDialog({
                 <Calendar
                   mode="single"
                   selected={formData.due_date || undefined}
-                  onSelect={(date) =>
-                    setFormData({ ...formData, due_date: date || null })
-                  }
+                  onSelect={(date) => {
+                    setFormData({ ...formData, due_date: date || null });
+                    setDatePickerOpen(false);
+                  }}
                   initialFocus
                 />
               </PopoverContent>

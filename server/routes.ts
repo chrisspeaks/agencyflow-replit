@@ -306,7 +306,7 @@ router.post("/api/tasks/:taskId/assignees", requireAuth, async (req, res) => {
           assigneeEmail: profile.email,
           assigneeName: profile.fullName || profile.email,
           projectName,
-          dueDate: task.dueDate || undefined,
+          dueDate: task.dueDate ? task.dueDate.toISOString() : undefined,
           priority: task.priority || "medium",
           action: "assigned",
         }).catch(err => console.error("Task assignment email error:", err));
@@ -436,7 +436,16 @@ router.post("/api/tasks/:taskId/comments", requireAuth, async (req, res) => {
 router.get("/api/tasks/:taskId/logs", requireAuth, async (req, res) => {
   try {
     const logs = await storage.getTaskLogs(req.params.taskId);
-    res.json(logs);
+    const logsWithUserNames = await Promise.all(
+      logs.map(async (log: any) => {
+        const profile = await storage.getProfile(log.userId);
+        return {
+          ...log,
+          userName: profile?.fullName || profile?.email || "Unknown",
+        };
+      })
+    );
+    res.json(logsWithUserNames);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

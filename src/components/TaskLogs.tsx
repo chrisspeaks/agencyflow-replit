@@ -8,13 +8,13 @@ import { History, User, ArrowRight, MessageSquare, Users } from "lucide-react";
 
 interface TaskLog {
   id: string;
-  action_type: string;
-  old_value: string | null;
-  new_value: string | null;
+  actionType: string;
+  oldValue: string | null;
+  newValue: string | null;
   details: any;
-  created_at: string;
-  user_id: string;
-  user_name?: string;
+  createdAt: string;
+  userId: string;
+  userName?: string;
 }
 
 interface TaskLogsProps {
@@ -69,39 +69,39 @@ export function TaskLogs({ taskId, filterType = "all" }: TaskLogsProps) {
   };
 
   const getActionLabel = (log: TaskLog) => {
-    switch (log.action_type) {
+    switch (log.actionType) {
       case "status":
         return (
           <span>
-            changed status from <strong>{log.old_value || "None"}</strong> to{" "}
-            <strong>{log.new_value}</strong>
+            changed status from <strong>{log.oldValue || "None"}</strong> to{" "}
+            <strong>{log.newValue}</strong>
           </span>
         );
       case "assignee":
-        if (log.old_value && log.new_value) {
+        if (log.oldValue && log.newValue) {
           return (
             <span>
-              changed assignee from <strong>{log.old_value}</strong> to{" "}
-              <strong>{log.new_value}</strong>
+              changed assignee from <strong>{log.oldValue}</strong> to{" "}
+              <strong>{log.newValue}</strong>
             </span>
           );
-        } else if (log.new_value) {
+        } else if (log.newValue) {
           return (
             <span>
-              assigned <strong>{log.new_value}</strong>
+              assigned <strong>{log.newValue}</strong>
             </span>
           );
         } else {
           return (
             <span>
-              unassigned <strong>{log.old_value}</strong>
+              unassigned <strong>{log.oldValue}</strong>
             </span>
           );
         }
       case "comment":
         return <span>added a comment</span>;
       default:
-        return <span>{log.action_type}</span>;
+        return <span>{log.actionType}</span>;
     }
   };
 
@@ -141,16 +141,16 @@ export function TaskLogs({ taskId, filterType = "all" }: TaskLogsProps) {
             {logs.map((log) => (
               <div key={log.id} className="flex gap-2 text-xs">
                 <div className="shrink-0 mt-0.5 text-muted-foreground">
-                  {getActionIcon(log.action_type)}
+                  {getActionIcon(log.actionType)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 flex-wrap">
                     <User className="h-3 w-3 text-muted-foreground" />
-                    <span className="font-medium">{log.user_name || "Unknown"}</span>
+                    <span className="font-medium">{log.userName || "Unknown"}</span>
                     <span className="text-muted-foreground">{getActionLabel(log)}</span>
                   </div>
                   <div className="text-muted-foreground mt-0.5">
-                    {format(new Date(log.created_at), "MMM d, yyyy 'at' h:mm a")}
+                    {format(new Date(log.createdAt), "MMM d, yyyy 'at' h:mm a")}
                   </div>
                 </div>
               </div>
