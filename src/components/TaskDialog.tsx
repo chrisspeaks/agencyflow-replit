@@ -141,15 +141,20 @@ export function TaskDialog({
   }, []);
 
   const fetchLatestComment = useCallback(async (taskId: string) => {
+    setLatestComment(null);
     try {
       const response = await fetch(`/api/tasks/${taskId}/latest-comment`, {
         headers: getAuthHeaders(),
       });
+      if (response.status === 404) {
+        return;
+      }
       if (!response.ok) throw new Error("Failed to fetch latest comment");
       const data = await response.json();
       setLatestComment(data);
     } catch (error) {
       console.error("Error fetching latest comment:", error);
+      setLatestComment(null);
     }
   }, []);
 
@@ -407,19 +412,56 @@ export function TaskDialog({
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="comments" className="text-sm">Comments</Label>
-            <Textarea
-              id="comments"
-              value={formData.comments}
-              onChange={(e) =>
-                setFormData({ ...formData, comments: e.target.value })
-              }
-              placeholder="Add any additional comments or notes"
-              rows={2}
-              className="text-sm"
-              data-testid="input-task-comments"
-            />
+          <div className="space-y-3">
+            <Label className="text-sm">Comments</Label>
+            
+            {/* Latest Comment Display */}
+            {task && latestComment && (
+              <div className="p-3 bg-muted/50 rounded-md space-y-1">
+                <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
+                  <MessageSquare className="h-3 w-3" />
+                  <span className="font-medium">{latestComment.userName}</span>
+                  <span>•</span>
+                  <span>{format(new Date(latestComment.createdAt), "MMM d, h:mm a")}</span>
+                </div>
+                <p className="text-sm" data-testid="text-latest-comment">{latestComment.content}</p>
+              </div>
+            )}
+            
+            {/* New Comment Input */}
+            {task && (
+              <div className="flex gap-2">
+                <Input
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  placeholder="Add a comment..."
+                  className="flex-1 h-9"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSubmitComment();
+                    }
+                  }}
+                  disabled={submittingComment}
+                  data-testid="input-new-comment"
+                />
+                <Button
+                  type="button"
+                  size="icon"
+                  onClick={handleSubmitComment}
+                  disabled={!newComment.trim() || submittingComment}
+                  data-testid="button-submit-comment"
+                >
+                  {submittingComment ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            )}
+            
+            {/* See Logs Button for Previous Comments */}
             {task && (
               <TaskLogs taskId={task.id} filterType="comment" />
             )}
