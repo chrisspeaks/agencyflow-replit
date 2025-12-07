@@ -17,11 +17,17 @@ client.connect()
 done
 echo "Database is ready!"
 
-echo "Running database migrations..."
-npm run db:push 2>/dev/null || npx drizzle-kit push
+# Check if migrations should be skipped (user has pre-initialized database)
+if [ "$SKIP_MIGRATIONS" = "true" ]; then
+  echo "SKIP_MIGRATIONS is set to true, skipping database migrations and admin initialization..."
+  echo "Make sure you have imported the database schema using the provided init-db.sql file."
+else
+  echo "Running database migrations..."
+  npm run db:push 2>/dev/null || npx drizzle-kit push
 
-echo "Initializing default admin user..."
-npx tsx scripts/init-admin.ts
+  echo "Initializing default admin user..."
+  npx tsx scripts/init-admin.ts
+fi
 
 echo "Starting application..."
 exec npx tsx server/index.ts
