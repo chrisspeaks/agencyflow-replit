@@ -44,6 +44,7 @@ export interface IStorage {
 
   // Tasks
   getTask(id: string): Promise<Task | undefined>;
+  getAllTasks(): Promise<Task[]>;
   getTasksByProject(projectId: string): Promise<Task[]>;
   getTasksByAssignee(userId: string): Promise<Task[]>;
   createTask(task: InsertTask): Promise<Task>;
@@ -161,6 +162,28 @@ export class PostgresStorage implements IStorage {
   async getTask(id: string) {
     const [task] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, id));
     return task;
+  }
+
+  async getAllTasks() {
+    const tasks = await db.select().from(schema.tasks).orderBy(desc(schema.tasks.createdAt));
+    const tasksWithDetails = await Promise.all(
+      tasks.map(async (task) => {
+        const project = await this.getProject(task.projectId);
+        const assignees = await this.getTaskAssignees(task.id);
+        let assigneeName = "";
+        if (assignees.length > 0) {
+          const profile = await this.getProfile(assignees[0]);
+          assigneeName = profile?.fullName || profile?.email || "";
+        }
+        return {
+          ...task,
+          projectName: project?.name,
+          projectColor: project?.brandColor,
+          assigneeName,
+        };
+      })
+    );
+    return tasksWithDetails;
   }
 
   async getTasksByProject(projectId: string) {

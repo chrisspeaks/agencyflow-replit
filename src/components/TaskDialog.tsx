@@ -527,12 +527,6 @@ export function TaskDialog({
             <Label htmlFor="blocked" className="text-sm">Task is blocked</Label>
           </div>
 
-          {task && (
-            <div className="pt-2 border-t">
-              <TaskLogs taskId={task.id} filterType="all" />
-            </div>
-          )}
-
           <DialogFooter className="gap-2 sm:gap-0 pt-2">
             <Button
               type="button"

@@ -151,6 +151,10 @@ export function KanbanBoard({ projectId, refreshKey }: KanbanBoardProps) {
 
   useEffect(() => {
     fetchTasks();
+    const interval = setInterval(() => {
+      fetchTasks();
+    }, 10000);
+    return () => clearInterval(interval);
   }, [fetchTasks, refreshKey]);
 
   const handleDragStart = (event: DragStartEvent) => {

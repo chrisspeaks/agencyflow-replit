@@ -181,7 +181,15 @@ router.get("/api/tasks", requireAuth, async (req, res) => {
     } else if (assigneeId) {
       tasks = await storage.getTasksByAssignee(assigneeId as string);
     } else {
-      tasks = await storage.getTasksByAssignee(req.user!.id);
+      const roles = await storage.getUserRoles(req.user!.id);
+      const isAdminOrManager = roles.includes("admin") || roles.includes("manager") || 
+        req.user!.profile?.role === "admin" || req.user!.profile?.role === "manager";
+      
+      if (isAdminOrManager) {
+        tasks = await storage.getAllTasks();
+      } else {
+        tasks = await storage.getTasksByAssignee(req.user!.id);
+      }
     }
     
     res.json(tasks);
@@ -477,17 +485,13 @@ router.post("/api/tasks/:taskId/comments", requireAuth, async (req, res) => {
       content: req.body.content,
     });
     
-    const contentPreview = req.body.content.length > 50 
-      ? req.body.content.substring(0, 50) + "..." 
-      : req.body.content;
-    
     await storage.createTaskLog({
       taskId: req.params.taskId,
       userId: req.user!.id,
       actionType: "comment_added",
       oldValue: null,
-      newValue: contentPreview,
-      details: `Added a comment`,
+      newValue: req.body.content,
+      details: req.body.content,
     });
     
     res.json({ success: true });
@@ -498,7 +502,17 @@ router.post("/api/tasks/:taskId/comments", requireAuth, async (req, res) => {
 
 router.get("/api/tasks/:taskId/logs", requireAuth, async (req, res) => {
   try {
-    const logs = await storage.getTaskLogs(req.params.taskId);
+    const { type } = req.query;
+    let logs = await storage.getTaskLogs(req.params.taskId);
+    
+    if (type === "comment") {
+      logs = logs.filter((log: any) => log.actionType === "comment_added");
+    } else if (type === "assignee") {
+      logs = logs.filter((log: any) => 
+        log.actionType === "assignee_added" || log.actionType === "assignee_removed"
+      );
+    }
+    
     const logsWithUserNames = await Promise.all(
       logs.map(async (log: any) => {
         const profile = await storage.getProfile(log.userId);

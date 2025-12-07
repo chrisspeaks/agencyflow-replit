@@ -28,6 +28,8 @@ const Projects = () => {
   const { data: projects = [], isLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
     enabled: !!user,
+    refetchInterval: 10000,
+    staleTime: 5000,
   });
 
   // Filter out closed projects for staff

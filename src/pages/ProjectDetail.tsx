@@ -35,6 +35,10 @@ export default function ProjectDetail() {
 
   useEffect(() => {
     fetchData();
+    const interval = setInterval(() => {
+      fetchData();
+    }, 10000);
+    return () => clearInterval(interval);
   }, [projectId]);
 
   const fetchData = async () => {

@@ -34,11 +34,15 @@ const Dashboard = () => {
   const { data: projects = [], isLoading: projectsLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
     enabled: !!user,
+    refetchInterval: 10000,
+    staleTime: 5000,
   });
 
   const { data: tasks = [], isLoading: tasksLoading } = useQuery<Task[]>({
     queryKey: ["/api/tasks"],
     enabled: !!user,
+    refetchInterval: 10000,
+    staleTime: 5000,
   });
 
   const loading = projectsLoading || tasksLoading;
