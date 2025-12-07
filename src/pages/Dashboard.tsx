@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
@@ -5,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FolderKanban, CheckCircle2, AlertCircle, Calendar } from "lucide-react";
 import { format } from "date-fns";
+import { TaskDialog } from "@/components/TaskDialog";
+import { queryClient } from "@/lib/queryClient";
 
 interface Project {
   id: string;
@@ -25,6 +28,8 @@ interface Task {
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
 
   const { data: projects = [], isLoading: projectsLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -38,10 +43,8 @@ const Dashboard = () => {
 
   const loading = projectsLoading || tasksLoading;
 
-  // Filter projects by status
   const activeProjects = projects.filter(p => p.status === "active").slice(0, 5);
 
-  // Split tasks into pending and overdue
   const now = new Date();
   const pendingTasks: Task[] = [];
   const overdueTasks: Task[] = [];
@@ -53,6 +56,35 @@ const Dashboard = () => {
       pendingTasks.push(task);
     }
   });
+
+  const handleTaskClick = async (task: Task) => {
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await fetch(`/api/tasks/${task.id}`, {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : "",
+        },
+      });
+      if (response.ok) {
+        const fullTask = await response.json();
+        setSelectedTask({ ...task, ...fullTask });
+        setIsTaskDialogOpen(true);
+      }
+    } catch (error) {
+      console.error("Error fetching task details:", error);
+    }
+  };
+
+  const handleTaskDialogClose = (open: boolean) => {
+    setIsTaskDialogOpen(open);
+    if (!open) {
+      setSelectedTask(null);
+    }
+  };
+
+  const handleTaskUpdated = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+  };
 
   if (loading) {
     return (
@@ -130,7 +162,7 @@ const Dashboard = () => {
                 <div 
                   key={task.id} 
                   className="p-1.5 rounded-md bg-muted/50 hover:bg-muted cursor-pointer text-xs" 
-                  onClick={() => navigate(`/projects/${task.projectId}?taskId=${task.id}`)}
+                  onClick={() => handleTaskClick(task)}
                   data-testid={`card-task-${task.id}`}
                 >
                   <div className="font-medium truncate">{task.title}</div>
@@ -165,7 +197,7 @@ const Dashboard = () => {
                 <div 
                   key={task.id} 
                   className="p-1.5 rounded-md bg-destructive/10 border border-destructive/20 hover:bg-destructive/20 cursor-pointer text-xs" 
-                  onClick={() => navigate(`/projects/${task.projectId}?taskId=${task.id}`)}
+                  onClick={() => handleTaskClick(task)}
                   data-testid={`card-task-overdue-${task.id}`}
                 >
                   <div className="font-medium truncate text-destructive">{task.title}</div>
@@ -187,6 +219,16 @@ const Dashboard = () => {
           </CardContent>
         </Card>
       </div>
+
+      {selectedTask && (
+        <TaskDialog
+          open={isTaskDialogOpen}
+          onOpenChange={handleTaskDialogClose}
+          projectId={selectedTask.projectId}
+          task={selectedTask}
+          onTaskCreated={handleTaskUpdated}
+        />
+      )}
     </div>
   );
 };

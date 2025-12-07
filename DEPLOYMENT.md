@@ -186,17 +186,51 @@ health_check:
 
 ## Database Setup
 
-### Initial Database Migration
+### Automatic Database Setup (Docker)
 
-After the first deployment, run database migrations:
+When using Docker, the database is automatically set up on first run:
+
+1. **Database migrations** run automatically via `drizzle-kit push`
+2. **Default admin user** is created automatically:
+   - Email: `admin@website.com`
+   - Password: `Admin123`
+   - **IMPORTANT**: Change this password immediately after first login!
+
+The Docker entrypoint script handles:
+- Waiting for the database to be ready
+- Running database migrations
+- Creating the default admin user (if not exists)
+- Starting the application
+
+### Manual Database Migration
+
+If you need to run migrations manually:
 
 ```bash
 # Using Docker
-docker exec -it agencyflow npm run db:push
+docker exec -it agencyflow npx drizzle-kit push --force
 
 # Or connect directly to the database and run:
 npm run db:push
 ```
+
+### Database Schema
+
+The application uses the following main tables:
+
+| Table | Description |
+|-------|-------------|
+| `users` | User authentication (email, password hash) |
+| `profiles` | User profile information (name, role, avatar) |
+| `user_roles` | Role assignments (admin, manager, staff) |
+| `sessions` | JWT session management |
+| `projects` | Project definitions (name, description, status) |
+| `project_members` | Project team membership |
+| `tasks` | Task definitions (title, status, priority, due date) |
+| `task_assignees` | Task assignments (many-to-many) |
+| `task_comments` | Comments on tasks |
+| `task_logs` | Activity logs (status changes, assignments, comments) |
+| `notifications` | User notifications |
 
 ### Database Backup
 

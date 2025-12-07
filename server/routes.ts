@@ -245,6 +245,11 @@ router.get("/api/tasks/:id", requireAuth, async (req, res) => {
 router.patch("/api/tasks/:id", requireAuth, async (req, res) => {
   try {
     const body = req.body;
+    const existingTask = await storage.getTask(req.params.id);
+    if (!existingTask) {
+      return res.status(404).json({ error: "Task not found" });
+    }
+    
     const updateData: any = {};
     if (body.title !== undefined) updateData.title = body.title;
     if (body.description !== undefined) updateData.description = body.description;
@@ -268,6 +273,29 @@ router.patch("/api/tasks/:id", requireAuth, async (req, res) => {
     if (!updated) {
       return res.status(404).json({ error: "Task not found" });
     }
+    
+    if (body.status !== undefined && body.status !== existingTask.status) {
+      await storage.createTaskLog({
+        taskId: req.params.id,
+        userId: req.user!.id,
+        actionType: "status_change",
+        oldValue: existingTask.status,
+        newValue: body.status,
+        details: `Status changed from "${existingTask.status}" to "${body.status}"`,
+      });
+    }
+    
+    if (body.priority !== undefined && body.priority !== existingTask.priority) {
+      await storage.createTaskLog({
+        taskId: req.params.id,
+        userId: req.user!.id,
+        actionType: "priority_change",
+        oldValue: existingTask.priority,
+        newValue: body.priority,
+        details: `Priority changed from "${existingTask.priority}" to "${body.priority}"`,
+      });
+    }
+    
     res.json(updated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -300,11 +328,22 @@ router.post("/api/tasks/:taskId/assignees", requireAuth, async (req, res) => {
       });
       
       const profile = await storage.getProfile(userId);
+      const assigneeName = profile?.fullName || profile?.email || "Unknown";
+      
+      await storage.createTaskLog({
+        taskId: req.params.taskId,
+        userId: req.user!.id,
+        actionType: "assignee_added",
+        oldValue: null,
+        newValue: userId,
+        details: `Assigned to ${assigneeName}`,
+      });
+      
       if (profile?.email && task) {
         sendTaskAssignmentEmail({
           taskTitle: task.title,
           assigneeEmail: profile.email,
-          assigneeName: profile.fullName || profile.email,
+          assigneeName,
           projectName,
           dueDate: task.dueDate ? task.dueDate.toISOString() : undefined,
           priority: task.priority || "medium",
@@ -322,8 +361,18 @@ router.delete("/api/tasks/:taskId/assignees/:userId", requireAuth, async (req, r
   try {
     const task = await storage.getTask(req.params.taskId);
     const profile = await storage.getProfile(req.params.userId);
+    const assigneeName = profile?.fullName || profile?.email || "Unknown";
     
     await storage.removeTaskAssignee(req.params.taskId, req.params.userId);
+    
+    await storage.createTaskLog({
+      taskId: req.params.taskId,
+      userId: req.user!.id,
+      actionType: "assignee_removed",
+      oldValue: req.params.userId,
+      newValue: null,
+      details: `Unassigned from ${assigneeName}`,
+    });
     
     if (profile?.email && task) {
       let projectName = "Project";
@@ -334,7 +383,7 @@ router.delete("/api/tasks/:taskId/assignees/:userId", requireAuth, async (req, r
       sendTaskAssignmentEmail({
         taskTitle: task.title,
         assigneeEmail: profile.email,
-        assigneeName: profile.fullName || profile.email,
+        assigneeName,
         projectName,
         priority: task.priority || "medium",
         action: "unassigned",
@@ -427,6 +476,20 @@ router.post("/api/tasks/:taskId/comments", requireAuth, async (req, res) => {
       userId: req.user!.id,
       content: req.body.content,
     });
+    
+    const contentPreview = req.body.content.length > 50 
+      ? req.body.content.substring(0, 50) + "..." 
+      : req.body.content;
+    
+    await storage.createTaskLog({
+      taskId: req.params.taskId,
+      userId: req.user!.id,
+      actionType: "comment_added",
+      oldValue: null,
+      newValue: contentPreview,
+      details: `Added a comment`,
+    });
+    
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
