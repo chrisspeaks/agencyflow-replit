@@ -24,4 +24,4 @@ echo "Initializing default admin user..."
 npx tsx scripts/init-admin.ts
 
 echo "Starting application..."
-exec npx tsx server/index.js
+exec npx tsx server/index.ts
