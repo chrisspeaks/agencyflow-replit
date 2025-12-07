@@ -23,13 +23,20 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { TASK_STATUSES, TASK_PRIORITIES } from "@/config/appConfig";
-import { Calendar as CalendarIcon, Loader2, Lock } from "lucide-react";
+import { Calendar as CalendarIcon, Loader2, Lock, Send, MessageSquare } from "lucide-react";
 import { format } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
 import { createNotificationForUser } from "@/lib/notifications";
 import { useAuth } from "@/lib/auth";
 import { TaskLogs } from "@/components/TaskLogs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+
+interface LatestComment {
+  id: string;
+  content: string;
+  userName: string;
+  createdAt: string;
+}
 
 interface TaskDialogProps {
   open: boolean;
@@ -57,6 +64,9 @@ export function TaskDialog({
   const [loading, setLoading] = useState(false);
   const [teamMembers, setTeamMembers] = useState<Profile[]>([]);
   const [projectName, setProjectName] = useState("");
+  const [latestComment, setLatestComment] = useState<LatestComment | null>(null);
+  const [newComment, setNewComment] = useState("");
+  const [submittingComment, setSubmittingComment] = useState(false);
 
   const userRole = user?.profile?.role;
   const isAdminOrManager = userRole === "admin" || userRole === "manager";
@@ -130,12 +140,55 @@ export function TaskDialog({
     }
   }, []);
 
+  const fetchLatestComment = useCallback(async (taskId: string) => {
+    try {
+      const response = await fetch(`/api/tasks/${taskId}/latest-comment`, {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) throw new Error("Failed to fetch latest comment");
+      const data = await response.json();
+      setLatestComment(data);
+    } catch (error) {
+      console.error("Error fetching latest comment:", error);
+    }
+  }, []);
+
+  const handleSubmitComment = async () => {
+    if (!newComment.trim() || !task) return;
+    
+    setSubmittingComment(true);
+    try {
+      await apiRequest(`/api/tasks/${task.id}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ content: newComment.trim() }),
+      });
+      
+      setNewComment("");
+      await fetchLatestComment(task.id);
+      
+      toast({
+        title: "Comment added",
+        description: "Your comment has been posted",
+      });
+    } catch (error: any) {
+      console.error("Error submitting comment:", error);
+      toast({
+        title: "Error",
+        description: "Failed to post comment",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
   useEffect(() => {
     if (open) {
       fetchTeamMembers();
       fetchProjectName();
       if (task) {
         fetchTaskAssignees(task.id);
+        fetchLatestComment(task.id);
         setFormData({
           title: task.title || "",
           description: task.description || "",
@@ -157,9 +210,11 @@ export function TaskDialog({
           is_blocked: false,
           comments: "",
         });
+        setLatestComment(null);
+        setNewComment("");
       }
     }
-  }, [open, task, fetchTeamMembers, fetchProjectName, fetchTaskAssignees]);
+  }, [open, task, fetchTeamMembers, fetchProjectName, fetchTaskAssignees, fetchLatestComment]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

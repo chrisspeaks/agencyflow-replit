@@ -87,6 +87,18 @@ router.get("/api/projects/:id", requireAuth, async (req, res) => {
     if (!project) {
       return res.status(404).json({ error: "Project not found" });
     }
+    
+    const roles = await storage.getUserRoles(req.user!.id);
+    const isAdminOrManager = roles.includes("admin") || roles.includes("manager") || 
+      req.user!.profile?.role === "admin" || req.user!.profile?.role === "manager";
+    
+    if (!isAdminOrManager) {
+      const memberProjects = await storage.getUserProjects(req.user!.id);
+      if (!memberProjects.includes(req.params.id)) {
+        return res.status(403).json({ error: "You don't have access to this project" });
+      }
+    }
+    
     res.json(project);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -107,6 +119,17 @@ router.patch("/api/projects/:id", requireAuth, requireRole("admin", "manager"), 
 
 router.get("/api/projects/:projectId/members", requireAuth, async (req, res) => {
   try {
+    const roles = await storage.getUserRoles(req.user!.id);
+    const isAdminOrManager = roles.includes("admin") || roles.includes("manager") || 
+      req.user!.profile?.role === "admin" || req.user!.profile?.role === "manager";
+    
+    if (!isAdminOrManager) {
+      const memberProjects = await storage.getUserProjects(req.user!.id);
+      if (!memberProjects.includes(req.params.projectId)) {
+        return res.status(403).json({ error: "You don't have access to this project" });
+      }
+    }
+    
     const memberIds = await storage.getProjectMembers(req.params.projectId);
     const profiles = await Promise.all(
       memberIds.map(async (userId) => {
@@ -166,6 +189,62 @@ router.delete("/api/projects/:projectId/members/:userId", requireAuth, requireRo
     }
     
     res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/api/projects/:projectId/tasks", requireAuth, async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { hasDueDate } = req.query;
+    
+    const roles = await storage.getUserRoles(req.user!.id);
+    const isAdminOrManager = roles.includes("admin") || roles.includes("manager") || 
+      req.user!.profile?.role === "admin" || req.user!.profile?.role === "manager";
+    
+    if (!isAdminOrManager) {
+      const memberProjects = await storage.getUserProjects(req.user!.id);
+      if (!memberProjects.includes(projectId)) {
+        return res.status(403).json({ error: "You don't have access to this project" });
+      }
+    }
+    
+    let tasks = await storage.getTasksByProject(projectId);
+    
+    if (hasDueDate === "true") {
+      tasks = tasks.filter((task: any) => task.dueDate !== null);
+    }
+    
+    const tasksWithDetails = await Promise.all(
+      tasks.map(async (task: any) => {
+        const assignees = await storage.getTaskAssignees(task.id);
+        let assigneeName = "";
+        let assigneeAvatar = null;
+        if (assignees.length > 0) {
+          const profile = await storage.getProfile(assignees[0]);
+          assigneeName = profile?.fullName || profile?.email || "";
+          assigneeAvatar = profile?.avatarUrl || null;
+        }
+        return {
+          id: task.id,
+          title: task.title,
+          description: task.description,
+          status: task.status,
+          priority: task.priority,
+          due_date: task.dueDate,
+          is_blocked: task.isBlocked,
+          assignee_id: assignees[0] || null,
+          comments: task.comments,
+          assignee_name: assigneeName,
+          assignee_avatar: assigneeAvatar,
+          project_id: task.projectId,
+          created_by: task.createdBy,
+        };
+      })
+    );
+    
+    res.json(tasksWithDetails);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -471,7 +550,33 @@ router.delete("/api/notifications", requireAuth, async (req, res) => {
 router.get("/api/tasks/:taskId/comments", requireAuth, async (req, res) => {
   try {
     const comments = await storage.getTaskComments(req.params.taskId);
-    res.json(comments);
+    const commentsWithUserNames = await Promise.all(
+      comments.map(async (comment: any) => {
+        const profile = await storage.getProfile(comment.userId);
+        return {
+          ...comment,
+          userName: profile?.fullName || profile?.email || "Unknown",
+        };
+      })
+    );
+    res.json(commentsWithUserNames);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/api/tasks/:taskId/latest-comment", requireAuth, async (req, res) => {
+  try {
+    const comments = await storage.getTaskComments(req.params.taskId);
+    if (comments.length === 0) {
+      return res.json(null);
+    }
+    const latestComment = comments[comments.length - 1];
+    const profile = await storage.getProfile(latestComment.userId);
+    res.json({
+      ...latestComment,
+      userName: profile?.fullName || profile?.email || "Unknown",
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
