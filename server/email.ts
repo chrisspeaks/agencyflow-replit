@@ -72,7 +72,7 @@ export async function sendTaskAssignmentEmail(params: {
           
           <p style="margin-top: 30px;">
             Best regards,<br>
-            <strong>AgencyFlow Team</strong>
+            <strong>TUS Global Team</strong>
           </p>
         </div>
       </body>
@@ -93,7 +93,7 @@ export async function sendTaskAssignmentEmail(params: {
           
           <p style="margin-top: 30px;">
             Best regards,<br>
-            <strong>AgencyFlow Team</strong>
+            <strong>TUS Global Team</strong>
           </p>
         </div>
       </body>
@@ -127,7 +127,7 @@ export async function sendProjectMemberEmail(params: {
           
           <p style="margin-top: 30px;">
             Best regards,<br>
-            <strong>AgencyFlow Team</strong>
+            <strong>TUS Global Team</strong>
           </p>
         </div>
       </body>
@@ -143,7 +143,7 @@ export async function sendProjectMemberEmail(params: {
           
           <p style="margin-top: 30px;">
             Best regards,<br>
-            <strong>AgencyFlow Team</strong>
+            <strong>TUS Global Team</strong>
           </p>
         </div>
       </body>
@@ -173,7 +173,7 @@ export async function sendNotificationEmail(params: {
           
           <p style="margin-top: 30px;">
             Best regards,<br>
-            <strong>AgencyFlow Team</strong>
+            <strong>TUS Global Team</strong>
           </p>
         </div>
       </body>
