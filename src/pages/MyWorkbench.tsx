@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Clock, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Clock, AlertCircle, CheckCircle2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { format } from "date-fns";
 import { TaskDialog } from "@/components/TaskDialog";
 
@@ -22,10 +24,15 @@ interface Task {
   projectColor?: string;
 }
 
+type SortField = "none" | "dueDate" | "priority";
+type SortDirection = "asc" | "desc";
+
 export default function MyWorkbench() {
   const { user } = useAuth();
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [sortField, setSortField] = useState<SortField>("none");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
   const { data: tasks = [], isLoading, refetch } = useQuery<Task[]>({
     queryKey: ["/api/tasks", { assigneeId: user?.id }],
@@ -73,6 +80,54 @@ export default function MyWorkbench() {
   const internalReviewTasks = tasks.filter((t) => t.status === "Internal Review");
   const pendingClientReviewTasks = tasks.filter((t) => t.status === "Pending Client Review");
   const doneTasks = tasks.filter((t) => t.status === "Done");
+
+  const getPriorityWeight = (priority: string): number => {
+    switch (priority) {
+      case "P1-High": return 1;
+      case "P2-Medium": return 2;
+      case "P3-Low": return 3;
+      default: return 4;
+    }
+  };
+
+  const sortedTasks = useMemo(() => {
+    if (sortField === "none") return tasks;
+    
+    return [...tasks].sort((a, b) => {
+      if (sortField === "dueDate") {
+        const hasDateA = !!a.dueDate;
+        const hasDateB = !!b.dueDate;
+        
+        // Tasks without due dates always go to the bottom
+        if (!hasDateA && !hasDateB) return 0;
+        if (!hasDateA) return 1;
+        if (!hasDateB) return -1;
+        
+        const dateA = new Date(a.dueDate!).getTime();
+        const dateB = new Date(b.dueDate!).getTime();
+        const comparison = dateA - dateB;
+        return sortDirection === "asc" ? comparison : -comparison;
+      } else if (sortField === "priority") {
+        const comparison = getPriorityWeight(a.priority) - getPriorityWeight(b.priority);
+        return sortDirection === "asc" ? comparison : -comparison;
+      }
+      
+      return 0;
+    });
+  }, [tasks, sortField, sortDirection]);
+
+  const toggleSortDirection = () => {
+    setSortDirection(prev => prev === "asc" ? "desc" : "asc");
+  };
+
+  const handleSortChange = (value: string) => {
+    if (value === sortField) {
+      toggleSortDirection();
+    } else {
+      setSortField(value as SortField);
+      setSortDirection("asc");
+    }
+  };
 
   if (isLoading) {
     return (
@@ -165,17 +220,60 @@ export default function MyWorkbench() {
         </div>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
             <CardTitle>My Tasks</CardTitle>
+            <div className="flex items-center gap-2">
+              <Select value={sortField} onValueChange={handleSortChange}>
+                <SelectTrigger className="w-[160px]" data-testid="select-sort-field">
+                  <ArrowUpDown className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="Sort by..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No sorting</SelectItem>
+                  <SelectItem value="dueDate">Due Date</SelectItem>
+                  <SelectItem value="priority">Priority</SelectItem>
+                </SelectContent>
+              </Select>
+              {sortField !== "none" && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={toggleSortDirection}
+                  data-testid="button-toggle-sort-direction"
+                >
+                  {sortDirection === "asc" ? (
+                    sortField === "dueDate" ? (
+                      <ArrowUp className="h-4 w-4" />
+                    ) : (
+                      <ArrowDown className="h-4 w-4" />
+                    )
+                  ) : (
+                    sortField === "dueDate" ? (
+                      <ArrowDown className="h-4 w-4" />
+                    ) : (
+                      <ArrowUp className="h-4 w-4" />
+                    )
+                  )}
+                </Button>
+              )}
+              {sortField !== "none" && (
+                <span className="text-xs text-muted-foreground hidden sm:inline">
+                  {sortField === "dueDate" 
+                    ? (sortDirection === "asc" ? "Earliest first" : "Latest first")
+                    : (sortDirection === "asc" ? "High to Low" : "Low to High")
+                  }
+                </span>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
-            {tasks.length === 0 ? (
+            {sortedTasks.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">
                 You don't have any assigned tasks yet
               </p>
             ) : (
               <div className="space-y-3">
-                {tasks.map((task) => (
+                {sortedTasks.map((task) => (
                   <Card
                     key={task.id}
                     className="cursor-pointer hover:shadow-md transition-shadow"

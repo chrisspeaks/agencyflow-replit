@@ -259,11 +259,6 @@ Email sending is handled by `server/email.ts` using nodemailer:
    - Triggered from project member routes
    - Supports "added" and "removed" actions
 
-### Legacy Edge Functions (Supabase)
-The `supabase/functions/` directory contains edge functions for Supabase deployments:
-- These are NOT used when deploying with Docker/Dokploy
-- They are maintained for Supabase-specific deployments only
-
 ---
 
 ## Customizing Email Templates
@@ -295,23 +290,23 @@ You can customize:
 - **Call-to-action buttons** - Add links to specific pages
 
 ### After Customizing
-1. Save the edge function file
-2. Edge functions deploy automatically
+1. Save the email template file
+2. Restart the server to apply changes
 3. Test by triggering the relevant action (assign task, add member, etc.)
-4. Check edge function logs in Supabase for any errors
+4. Check server logs for any errors
 
 ---
 
 ## Additional Configuration
 
 ### Security Settings
-- **Password Protection**: Enable in Supabase Auth settings
-- **Email Verification**: Can be enabled/disabled in Supabase Auth
-- **Row Level Security (RLS)**: All tables have RLS policies enabled
+- **Password Protection**: Passwords are hashed using bcrypt
+- **JWT Authentication**: Secure token-based authentication
+- **Role-Based Access Control**: Enforced at API route level
 
 ### Database Access
 - **Admin Dashboard**: Manage users and roles
-- **Supabase Dashboard**: Direct database access for advanced users
+- **Database Tools**: Use standard PostgreSQL tools for direct database access
 - **SQL Editor**: Run custom queries if needed
 
 ### Future Enhancements
@@ -330,7 +325,7 @@ Consider adding:
 
 ### Emails Not Sending
 1. Check SMTP secrets are correctly configured
-2. View edge function logs in Supabase Dashboard
+2. View server logs for email errors
 3. Verify SMTP credentials with your email provider
 4. Check spam folder
 5. Ensure port 465 is not blocked by firewall
@@ -349,15 +344,15 @@ Consider adding:
 ### Dashboard Stats Not Updating
 1. Refresh the page
 2. Check user is assigned to projects
-3. Verify RLS policies allow user to see data
+3. Verify user has proper role permissions
 
 ---
 
 ## Support & Documentation
 
 For additional help:
-- Check the Supabase documentation: https://supabase.com/docs
-- Review edge function logs for debugging
+- Review server logs for debugging
+- Check the PostgreSQL documentation for database queries
 - Contact your system administrator for access issues
 
 ---

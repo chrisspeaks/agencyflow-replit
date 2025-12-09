@@ -616,6 +616,10 @@ router.get("/api/tasks/:taskId/logs", requireAuth, async (req, res) => {
       logs = logs.filter((log: any) => 
         log.actionType === "assignee_added" || log.actionType === "assignee_removed"
       );
+    } else if (type === "priority") {
+      logs = logs.filter((log: any) => log.actionType === "priority_change");
+    } else if (type === "progress") {
+      logs = logs.filter((log: any) => log.actionType === "status_change");
     }
     
     const logsWithUserNames = await Promise.all(

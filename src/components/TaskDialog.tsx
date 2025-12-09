@@ -487,6 +487,9 @@ export function TaskDialog({
                   ))}
                 </SelectContent>
               </Select>
+              {task && (
+                <TaskLogs taskId={task.id} filterType="progress" />
+              )}
             </div>
 
             <div className="space-y-2">
@@ -521,6 +524,9 @@ export function TaskDialog({
                   ))}
                 </SelectContent>
               </Select>
+              {task && (
+                <TaskLogs taskId={task.id} filterType="priority" />
+              )}
             </div>
           </div>
 
