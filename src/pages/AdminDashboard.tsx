@@ -11,7 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Shield, UserX, UserCheck, Loader2, UserPlus, KeyRound } from "lucide-react";
+import { Shield, UserX, UserCheck, Loader2, UserPlus, KeyRound, Trash2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -28,6 +29,7 @@ const AdminDashboard = () => {
   const { user } = useAuth();
   const [updatingRole, setUpdatingRole] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [deletingUser, setDeletingUser] = useState<string | null>(null);
   
   // Create user state
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -42,6 +44,7 @@ const AdminDashboard = () => {
   const [resetUserName, setResetUserName] = useState("");
   const [newPassword, setNewPassword] = useState("");
 
+  const currentUserId = user?.id;
   const currentUserRole = user?.profile?.role;
   const isAdmin = currentUserRole === "admin" || user?.roles?.includes("admin");
 
@@ -103,6 +106,21 @@ const AdminDashboard = () => {
       toast.error(error.message || "Failed to update user status");
     } finally {
       setUpdatingStatus(null);
+    }
+  };
+
+  const deleteUser = async (userId: string) => {
+    setDeletingUser(userId);
+    try {
+      await apiRequest(`/api/admin/users/${userId}`, {
+        method: "DELETE",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+      toast.success("User deleted successfully");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete user");
+    } finally {
+      setDeletingUser(null);
     }
   };
 
@@ -255,13 +273,44 @@ const AdminDashboard = () => {
                   </TableCell>
                   <TableCell><Badge variant={profile.isActive ? "default" : "secondary"}>{profile.isActive ? "Active" : "Inactive"}</Badge></TableCell>
                   <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
+                    <div className="flex justify-end gap-2 flex-wrap">
                       <Button variant="ghost" size="sm" onClick={() => { setResetUserId(profile.id); setResetUserName(profile.fullName); setResetDialogOpen(true); }} data-testid={`button-reset-pw-${profile.id}`}>
                         <KeyRound className="h-4 w-4 mr-1" />Reset PW
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => toggleUserStatus(profile.id, profile.isActive)} disabled={updatingStatus === profile.id} data-testid={`button-toggle-status-${profile.id}`}>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => toggleUserStatus(profile.id, profile.isActive)} 
+                        disabled={updatingStatus === profile.id || (profile.id === currentUserId && profile.isActive)} 
+                        data-testid={`button-toggle-status-${profile.id}`}
+                      >
                         {updatingStatus === profile.id ? <Loader2 className="h-4 w-4 animate-spin" /> : profile.isActive ? <><UserX className="h-4 w-4 mr-1" />Deactivate</> : <><UserCheck className="h-4 w-4 mr-1" />Activate</>}
                       </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            disabled={deletingUser === profile.id || profile.id === currentUserId}
+                            className="text-destructive hover:text-destructive"
+                            data-testid={`button-delete-user-${profile.id}`}
+                          >
+                            {deletingUser === profile.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Trash2 className="h-4 w-4 mr-1" />Delete</>}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete User</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to delete {profile.fullName}? This will remove their access to the portal and remove them from all teams. Their comments and activity history will be preserved.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => deleteUser(profile.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </TableCell>
                 </TableRow>

@@ -345,14 +345,82 @@ router.post("/api/admin/reset-password", requireAuth, requireRole("admin"), asyn
 router.patch("/api/admin/users/:id/activate", requireAuth, requireRole("admin"), async (req: Request, res: Response) => {
   try {
     const { isActive } = req.body;
+    const targetUserId = req.params.id;
+
+    // Prevent admin from deactivating themselves
+    if (targetUserId === req.user!.id && !isActive) {
+      return res.status(400).json({ error: "You cannot deactivate your own account" });
+    }
 
     await db.update(schema.profiles)
       .set({ isActive, updatedAt: new Date() })
-      .where(eq(schema.profiles.id, req.params.id));
+      .where(eq(schema.profiles.id, targetUserId));
+
+    // If deactivating, delete all user sessions to force logout
+    if (!isActive) {
+      await db.delete(schema.sessions).where(eq(schema.sessions.userId, targetUserId));
+    }
 
     res.json({ message: isActive ? "User activated" : "User deactivated" });
   } catch (error: any) {
     console.error("Admin activate user error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete("/api/admin/users/:id", requireAuth, requireRole("admin"), async (req: Request, res: Response) => {
+  try {
+    const targetUserId = req.params.id;
+
+    // Prevent admin from deleting themselves
+    if (targetUserId === req.user!.id) {
+      return res.status(400).json({ error: "You cannot delete your own account" });
+    }
+
+    // Check if user exists
+    const [targetUser] = await db.select().from(schema.profiles).where(eq(schema.profiles.id, targetUserId));
+    if (!targetUser) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Delete all user sessions first to force logout
+    await db.delete(schema.sessions).where(eq(schema.sessions.userId, targetUserId));
+
+    // Remove user from all project teams
+    await db.delete(schema.projectMembers).where(eq(schema.projectMembers.userId, targetUserId));
+
+    // Remove user from task assignees
+    await db.delete(schema.taskAssignees).where(eq(schema.taskAssignees.userId, targetUserId));
+
+    // Delete user notifications
+    await db.delete(schema.notifications).where(eq(schema.notifications.userId, targetUserId));
+
+    // Delete user roles
+    await db.delete(schema.userRoles).where(eq(schema.userRoles.userId, targetUserId));
+
+    // Soft-delete: Deactivate and anonymize the user profile instead of hard delete
+    // This preserves FK integrity for task_logs, task_comments, and tasks.created_by
+    await db.update(schema.profiles)
+      .set({ 
+        isActive: false, 
+        fullName: "[Deleted User]",
+        email: `deleted_${targetUserId}@deleted.local`,
+        avatarUrl: null,
+        updatedAt: new Date() 
+      })
+      .where(eq(schema.profiles.id, targetUserId));
+
+    // Update the user email to prevent reuse
+    await db.update(schema.users)
+      .set({ 
+        email: `deleted_${targetUserId}@deleted.local`,
+        updatedAt: new Date() 
+      })
+      .where(eq(schema.users.id, targetUserId));
+
+    res.json({ message: "User deleted successfully" });
+  } catch (error: any) {
+    console.error("Admin delete user error:", error);
     res.status(500).json({ error: error.message });
   }
 });

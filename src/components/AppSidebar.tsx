@@ -31,7 +31,7 @@ const settingsItems = [
 ];
 
 export function AppSidebar() {
-  const { state } = useSidebar();
+  const { state, isMobile, setOpenMobile } = useSidebar();
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -43,8 +43,13 @@ export function AppSidebar() {
   const isActive = (path: string) => currentPath === path;
 
   const handleSignOut = async () => {
+    if (isMobile) setOpenMobile(false);
     await logout();
     navigate("/auth");
+  };
+
+  const handleNavClick = () => {
+    if (isMobile) setOpenMobile(false);
   };
 
   return (
@@ -71,6 +76,7 @@ export function AppSidebar() {
                         className="hover:bg-sidebar-accent transition-smooth"
                         activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
                         data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
+                        onClick={handleNavClick}
                       >
                         <item.icon className="h-4 w-4" />
                         {!isCollapsed && <span>{item.title}</span>}
@@ -95,6 +101,7 @@ export function AppSidebar() {
                       className="hover:bg-sidebar-accent transition-smooth"
                       activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
                       data-testid={`nav-${item.title.toLowerCase()}`}
+                      onClick={handleNavClick}
                     >
                       <item.icon className="h-4 w-4" />
                       {!isCollapsed && <span>{item.title}</span>}
