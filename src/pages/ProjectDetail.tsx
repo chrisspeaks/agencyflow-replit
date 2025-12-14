@@ -10,7 +10,8 @@ import { TeamMembersDialog } from "@/components/TeamMembersDialog";
 import { CalendarView } from "@/components/CalendarView";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Plus, Calendar, LayoutGrid, Users, Lock } from "lucide-react";
+import { ArrowLeft, Plus, Calendar, LayoutGrid, Users, Lock, Pencil, Check, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
 interface Project {
@@ -32,6 +33,9 @@ export default function ProjectDetail() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState("");
+  const [updatingName, setUpdatingName] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -109,6 +113,50 @@ export default function ProjectDetail() {
     }
   };
 
+  const startEditingName = () => {
+    if (project) {
+      setEditedName(project.name);
+      setIsEditingName(true);
+    }
+  };
+
+  const cancelEditingName = () => {
+    setIsEditingName(false);
+    setEditedName("");
+  };
+
+  const handleNameUpdate = async () => {
+    if (!project || !editedName.trim()) return;
+    if (editedName.trim() === project.name) {
+      cancelEditingName();
+      return;
+    }
+    
+    setUpdatingName(true);
+    try {
+      await apiRequest(`/api/projects/${project.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: editedName.trim() }),
+      });
+
+      setProject({ ...project, name: editedName.trim() });
+      toast({
+        title: "Project updated",
+        description: "Project name has been updated",
+      });
+      setIsEditingName(false);
+    } catch (error: any) {
+      console.error("Error updating project name:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update project name",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingName(false);
+    }
+  };
+
   const isAdminOrManager = userRole === "admin" || userRole === "manager";
   const isClosed = project?.status === "completed" || project?.status === "archived";
 
@@ -169,7 +217,55 @@ export default function ProjectDetail() {
           </Button>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl sm:text-3xl font-bold truncate">{project.name}</h1>
+              {isEditingName ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={editedName}
+                    onChange={(e) => setEditedName(e.target.value)}
+                    className="text-xl sm:text-2xl font-bold h-10 w-48 sm:w-64"
+                    autoFocus
+                    disabled={updatingName}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleNameUpdate();
+                      if (e.key === "Escape") cancelEditingName();
+                    }}
+                    data-testid="input-project-name"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleNameUpdate}
+                    disabled={updatingName || !editedName.trim()}
+                    data-testid="button-save-project-name"
+                  >
+                    <Check className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={cancelEditingName}
+                    disabled={updatingName}
+                    data-testid="button-cancel-edit-name"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <h1 className="text-xl sm:text-3xl font-bold truncate">{project.name}</h1>
+                  {isAdminOrManager && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={startEditingName}
+                      className="shrink-0"
+                      data-testid="button-edit-project-name"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  )}
+                </>
+              )}
               <Badge variant={project.status === "active" ? "default" : "secondary"}>
                 {project.status}
               </Badge>
