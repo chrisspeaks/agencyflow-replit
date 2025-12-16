@@ -83,7 +83,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async getAllProfiles() {
-    return db.select().from(schema.profiles);
+    return db.select().from(schema.profiles).where(eq(schema.profiles.isActive, true));
   }
 
   async createProfile(profile: InsertProfile & { id: string }) {

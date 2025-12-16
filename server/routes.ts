@@ -134,6 +134,10 @@ router.get("/api/projects/:projectId/members", requireAuth, async (req, res) => 
     const profiles = await Promise.all(
       memberIds.map(async (userId) => {
         const profile = await storage.getProfile(userId);
+        // Filter out deleted/inactive users
+        if (!profile || profile.isActive === false) {
+          return null;
+        }
         return {
           user_id: userId,
           full_name: profile?.fullName || profile?.email || "Unknown",
@@ -141,7 +145,8 @@ router.get("/api/projects/:projectId/members", requireAuth, async (req, res) => 
         };
       })
     );
-    res.json(profiles);
+    // Remove null entries (deleted users)
+    res.json(profiles.filter(p => p !== null));
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
